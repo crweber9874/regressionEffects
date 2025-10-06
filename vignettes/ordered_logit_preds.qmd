@@ -187,7 +187,27 @@ my_model = polr(as.factor(attend_march) ~ prepost*vote_trump ,
 my_model |> summary()
 ```
 
+There is clearly an interaction effect -- support varies depending on whether the observation was before or after the election **and** whether the respondent voted for Trump or Biden. The sign of the lower order and interaction terms seems to indicate that Trump supporters are more supportive, post-election; Biden voters are more supporting in the pre-election. But how should we interpret this.
+
+In the `weberUtilities` package, there are functions to generate predicted probabilities from an ordered logit or probit model. We can use these to generate predicted probabilities for each category, across levels of `prepost` and `vote_trump`. If you first install the `devtools` package, you can install `weberUtilities` from GitHub:
+
+Instead of loading the entire package into your workspace with `devtools::`, this allows one to estimate a function from within the package. 
+
 ```{r}
+devtools::install_github("crweber9874/weberUtilities")
+```
+
+
+```{r}
+design_matrix <- expand.grid(
+   prepost = c(0,1),
+   vote_trump = c(0,1)
+ )
+
+predictions <- predict_ordinal_probs(
+  design_matrix = design_matrix,
+  model = my_model,
+  n_draws = 1000)
 ```
 
 ```{r, echo = TRUE}
