@@ -42,16 +42,3 @@ A data frame with summary statistics including:
 Takes long-format prediction data with draws and creates summary statistics
 including mean predictions and confidence intervals.
 }
-\examples{
-\dontrun{
-# After generating predictions
-predictions_long <- predict_logit_probs(design_matrix, model,
-                                         n_draws = 1000,
-                                         return_long = TRUE)
-
-# Summarize
-summary <- summarize_predictions(predictions_long,
-                                  group_vars = c("authoritarianism", "pid3"))
-}
-
-}

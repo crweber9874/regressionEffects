@@ -70,7 +70,7 @@ ggMargins_categories <- function(data = plot_dat,
         strip.text.x = ggplot2::element_text(size = size_x),
         panel.grid.major = ggplot2::element_line(colour = "#D0D0D0", linewidth = 0.25), # Changed size to linewidth for ggplot2 3.4.0+
         legend.position = "bottom",
-        ... # Pass additional arguments to theme
+        ...
       )
     return(plot)
   }

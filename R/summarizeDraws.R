@@ -29,12 +29,6 @@
 #' predictions_long <- predict_logit_probs(design_matrix, model,
 #'                                          n_draws = 1000,
 #'                                          return_long = TRUE)
-#'
-#' # Summarize
-#' summary <- summarize_predictions(predictions_long,
-#'                                   group_vars = c("authoritarianism", "pid3"))
-#' }
-#'
 #' @export
 summarize_predictions <- function(predictions_long,
                                   prob_col = NULL,
@@ -95,10 +89,8 @@ summarize_predictions <- function(predictions_long,
   lower_prob <- (1 - conf_level) / 2
   upper_prob <- 1 - lower_prob
 
-  # Create summary statistics
   if (is.null(group_vars)) {
-    # Overall summary without grouping
-    summary_data <- predictions_long %>%
+    summary_data <- predictions_long |>
       summarise(
         mean_prob = mean(.data[[prob_col]], na.rm = TRUE),
         median_prob = median(.data[[prob_col]], na.rm = TRUE),
@@ -117,8 +109,8 @@ summarize_predictions <- function(predictions_long,
 
   } else {
     # Group by specified variables
-    summary_data <- predictions_long %>%
-      group_by(across(all_of(group_vars))) %>%
+    summary_data <- predictions_long |>
+      group_by(across(all_of(group_vars))) |>
       summarise(
         mean_prob = mean(.data[[prob_col]], na.rm = TRUE),
         median_prob = median(.data[[prob_col]], na.rm = TRUE),
@@ -128,13 +120,12 @@ summarize_predictions <- function(predictions_long,
         .groups = "drop"
       )
 
-    # Add additional quantiles if requested
     if (!is.null(quantiles)) {
       for (q in quantiles) {
         q_name <- paste0("q_", sprintf("%.3f", q))
 
-        quant_data <- predictions_long %>%
-          group_by(across(all_of(group_vars))) %>%
+        quant_data <- predictions_long |>
+          group_by(across(all_of(group_vars))) |>
           summarise(
             !!q_name := quantile(.data[[prob_col]], q, na.rm = TRUE),
             .groups = "drop"
