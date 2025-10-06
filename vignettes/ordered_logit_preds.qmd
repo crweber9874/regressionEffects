@@ -194,7 +194,8 @@ In the `weberUtilities` package, there are functions to generate predicted proba
 Instead of loading the entire package into your workspace with `devtools::`, this allows one to estimate a function from within the package. 
 
 ```{r}
-devtools::install_github("crweber9874/weberUtilities")
+devtools::install_github("crweber9874/regressionEffects", force = TRUE)
+library(regressionEffects)
 ```
 
 
