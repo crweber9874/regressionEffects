@@ -1,0 +1,20 @@
+Package: weberUtilties
+Type: Package
+Title: Utilities for Ordered Regression Models
+Version: 0.1.0
+Authors@R: c(
+    person("Weber", "C.R.", email = "crweber9874@example.com", role = c("aut", "cre"))
+    )
+Description: A collection of utility functions for ordered regression models including ordered logit and probit models. Includes functions for model estimation, prediction, and visualization, along with sample datasets and a Shiny application for interactive analysis.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends: 
+    R (>= 3.5.0)
+Imports:
+    MASS,
+    stats
+Suggests:
+    shiny,
+    ggplot2
+RoxygenNote: 7.2.3
