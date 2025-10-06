@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.42">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Christopher Weber">
+<meta name="dcterms.date" content="2025-10-05">
+
+<title>Extending the Binary Model: Ordered Logit and Probit</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="regression_functions_files/libs/clipboard/clipboard.min.js"></script>
+<script src="regression_functions_files/libs/quarto-html/quarto.js"></script>
+<script src="regression_functions_files/libs/quarto-html/popper.min.js"></script>
+<script src="regression_functions_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="regression_functions_files/libs/quarto-html/anchor.min.js"></script>
+<link href="regression_functions_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="regression_functions_files/libs/quarto-html/quarto-syntax-highlighting-2f5df379a58b258e96c21c0638c20c03.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="regression_functions_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="regression_functions_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="regression_functions_files/libs/bootstrap/bootstrap-c0367b04c37547644fece4185067e4a7.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="regression_functions_files/libs/htmltools-fill-0.5.8.1/fill.css" rel="stylesheet">
+<script src="regression_functions_files/libs/htmlwidgets-1.6.4/htmlwidgets.js"></script>
+<script src="regression_functions_files/libs/plotly-binding-4.11.0/plotly.js"></script>
+<script src="regression_functions_files/libs/typedarray-0.1/typedarray.min.js"></script>
+<script src="regression_functions_files/libs/jquery-3.5.1/jquery.min.js"></script>
+<link href="regression_functions_files/libs/crosstalk-1.2.1/css/crosstalk.min.css" rel="stylesheet">
+<script src="regression_functions_files/libs/crosstalk-1.2.1/js/crosstalk.min.js"></script>
+<link href="regression_functions_files/libs/plotly-htmlwidgets-css-2.11.1/plotly-htmlwidgets.css" rel="stylesheet">
+<script src="regression_functions_files/libs/plotly-main-2.11.1/plotly-latest.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Extending the Binary Model: Ordered Logit and Probit</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Christopher Weber </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">October 5, 2025</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="the-ordered-logit" class="level2">
+<h2 class="anchored" data-anchor-id="the-ordered-logit">The Ordered Logit</h2>
+<ul>
+<li><p>This summary follows your assigned reading in Long (1997)</p></li>
+<li><p>Only use an ordered parameterization when we have ordered data.</p></li>
+<li><p>Some data can be ordered, even if they are theoretically multidimensional; others should be modeled differently</p></li>
+<li><p>Examples: PID, Ideology (social and economic dimensions)</p></li>
+<li><p>“How much do you agree or disagree with the following item?” from “1” Strongly Disagree to “5” Strongly Agree.</p></li>
+</ul>
+</section>
+<section id="why-not-ols" class="level2">
+<h2 class="anchored" data-anchor-id="why-not-ols">Why not OLS?</h2>
+<ul>
+<li>Ordered, non-interval level data may violate the assumptions of the classical linear regression model.</li>
+</ul>
+<ol type="1">
+<li><p>Non-constant variance.</p></li>
+<li><p>Predictions may be non-sensical (i.e., we predict things outside of the observed bounds).</p></li>
+<li><p>If the category distances are theoretically quite different.</p></li>
+</ol>
+</section>
+<section id="probit-or-logit" class="level2">
+<h2 class="anchored" data-anchor-id="probit-or-logit">Probit or Logit</h2>
+<ul>
+<li><p>Ordered logit or probit is a manner of personal preference.</p></li>
+<li><p>The ordered logit and the proportional odds assumption.</p></li>
+<li><p><span class="math inline">\(y_{latent}\)</span>, where <span class="math inline">\(y_{obs} \in (1,2,3,...k)\)</span>.</p></li>
+</ul>
+</section>
+<section id="the-latent-variable-approach" class="level2">
+<h2 class="anchored" data-anchor-id="the-latent-variable-approach">The Latent Variable Approach</h2>
+<ul>
+<li><p>Instead of the variable being 0/1, it is not more than two categories that are ordered. Assume we knew <span class="math inline">\(y_{latent}\)</span> and would like to map that to observing a particular category.</p></li>
+<li><p>Using the same logic from the binary regression model, assume that we observe the category based on its orientation to a series of cutpoints, where</p></li>
+</ul>
+<p><span class="math display">\[y_i=m: \tau_{k-1}\leq y_{latent} &lt; \tau_{k}\]</span></p>
+</section>
+<section id="the-measurement-model" class="level2">
+<h2 class="anchored" data-anchor-id="the-measurement-model">The Measurement Model</h2>
+<ul>
+<li><p>The <span class="math inline">\(\tau\)</span> parameters represent a series of thresholds that map the latent variable onto the categorical variable.</p></li>
+<li><p>In <span class="math inline">\(\texttt{MASS}::\texttt{polr}()\)</span> these are “zeta”</p></li>
+<li><p>A (Long 1997, 123)</p></li>
+</ul>
+<p><span class="math display">\[y_{obs} =
+  \begin{array}{lr}
+    A, \tau_0=\infty \leq y_{latent}&lt;\tau_1\\
+    B, \tau_1\leq y_{latent}&lt;\tau_2\\
+    C, \tau_2\leq y_{latent}&lt;\tau_3\\
+    D, \tau_3\leq y_{latent}&lt;\tau_4\\
+    E, \tau_4\leq y_{latent}&lt;\tau_5=\infty
+  \end{array}
+\]</span></p>
+</section>
+<section id="the-structural-model" class="level2">
+<h2 class="anchored" data-anchor-id="the-structural-model">The Structural Model</h2>
+<p><span class="math display">\[y_{latent}=\beta_0 + \beta_1x_i +...\sum^{J}_{j =1} \beta_j x_{ij}+e_i\]</span></p>
+<p><span class="math display">\[y=X\beta+e\]</span></p>
+<ul>
+<li>Where each row vector of X is a 1 (for the intercept) and any <span class="math inline">\(j+1\)</span> predictors.</li>
+</ul>
+</section>
+<section id="cutpoints" class="level2">
+<h2 class="anchored" data-anchor-id="cutpoints">Cutpoints</h2>
+<p>So what we’re doing is defining <span class="math inline">\(K-1\)</span> cutpoints, the slicing up the latent distribution into discrete categories.</p>
+<p><span class="math display">\[\begin{eqnarray*}
+pr(y_{i}=1|X_i) &amp; = &amp; pr(\tau_0 \leq y_{i,latent}&lt;\tau_1)|X_i) \\
+             &amp; = &amp;  pr(\tau_0 \leq X_i b+e_i&lt;\tau_1)|X_i) \\
+             &amp; = &amp;  pr(\tau_0 - X_ib \leq e_i&lt;\tau_1-X_ib)|X_i) \\
+             &amp; = &amp;  pr(\tau_1-X_ib)|X_i)-pr(\tau_0 - X_ib|X_i) \\
+             &amp; = &amp;  F(\tau_1-X_ib)-F(\tau_0 - X_ib) \\
+\end{eqnarray*}\]</span></p>
+</section>
+<section id="cutpoints-1" class="level2">
+<h2 class="anchored" data-anchor-id="cutpoints-1">Cutpoints</h2>
+<ul>
+<li><p>If F denotes the CDF, then for the ordered probit:</p></li>
+<li><p>The last row is simplified because the probability of the CDF evaluated from <span class="math inline">\(-\infty\)</span> to <span class="math inline">\(\infty\)</span> is 1, so the first term becomes 1. Any CDF is plausible, such as the logit, in which case we have,</p></li>
+</ul>
+<p><span class="math display">\[\begin{eqnarray*}
+Pr(y_{i}=k|X_i) &amp; = &amp;\Phi(\tau_1-\alpha-\beta X) \\
+             &amp; = &amp;  \Phi(\tau_2-\alpha-\beta X)-\Phi(\tau_1-\alpha-\beta X) \\
+             &amp; = &amp;  \Phi(\tau_3-\alpha-\beta X)-\Phi(\tau_2-\alpha-\beta X)\\
+             &amp; = &amp;  1-\Phi(\tau_4-\alpha-\beta X)\\
+\end{eqnarray*}\]</span></p>
+</section>
+<section id="the-ordered-logit-1" class="level2">
+<h2 class="anchored" data-anchor-id="the-ordered-logit-1">The Ordered Logit</h2>
+<p><span class="math display">\[\begin{eqnarray*}
+Pr(y_{i}=k|X_i) &amp; = &amp;Logit(\tau_1-\alpha-\beta X) \\
+                &amp; = &amp;  Logit(\tau_2-\alpha-\beta X)-Logit(\tau_1-\alpha-\beta X) \\
+                &amp; = &amp;  Logit(\tau_3-\alpha-\beta X)-Logit(\tau_2-\alpha-\beta X)\\
+             &amp; = &amp;  1-Logit(\tau_4-\alpha-\beta X)\\
+\end{eqnarray*}\]</span></p>
+<ul>
+<li><span class="math inline">\(F\)</span> generically to mean the CDF; and <span class="math inline">\(f\)</span> to denote the PDF.</li>
+</ul>
+</section>
+<section id="the-likelihood" class="level2">
+<h2 class="anchored" data-anchor-id="the-likelihood">The Likelihood</h2>
+<ul>
+<li>Recall, that the probability of being in the <span class="math inline">\(k\)</span>th category for the <span class="math inline">\(i\)</span>th subject is,</li>
+</ul>
+<p><span class="math display">\[\begin{eqnarray*}
+pr(y_{i}=k|X_i) &amp; = &amp; F(\tau_k-\alpha-X_i\beta)-F(\tau_{k-1}-\alpha-X_i\beta) \\
+\end{eqnarray*}\]</span></p>
+</section>
+<section id="the-likelihood-1" class="level2">
+<h2 class="anchored" data-anchor-id="the-likelihood-1">The Likelihood</h2>
+<p><span class="math display">\[Pr(y_{i}=1|X_i)\times pr(y_{i}=2|X_i) \times pr(y_{i}=3|X_i) \times....pr(y_{i}=K|X_i)\]</span>.</p>
+<p>This is just the joint probability for category membership, for each subject, so</p>
+<p><span class="math display">\[\begin{eqnarray*}
+Pr(y_{i}|X_i) &amp; = &amp; \prod_{k=1}^K F(\tau_k-\alpha-X_i\beta)-F(\tau_{k-1}-\alpha-X_i\beta) \\
+\end{eqnarray*}\]</span></p>
+</section>
+<section id="the-likelihood-2" class="level2">
+<h2 class="anchored" data-anchor-id="the-likelihood-2">The Likelihood</h2>
+<ul>
+<li>This only refers to the probability space for a single subject. Since the likelihood is <span class="math inline">\(\prod_{i=1}^N p_i\)</span>, we need to calculate the joint probability for each subject, which is,</li>
+</ul>
+<p><span class="math display">\[\begin{eqnarray*}
+pr(y|X) &amp; = &amp; \prod_{i=1}^N \prod_{k=1}^K F(\tau_k-\alpha-X_i\beta)-F(\tau_{k-1}-\alpha-X_i\beta) \\
+L(\beta \tau | y, X)&amp; = &amp; \prod_{i=1}^N \prod_{k=1}^K F(\tau_k-\alpha-X_i\beta)-F(\tau_{k-1}-\alpha-X_i\beta) \\
+\end{eqnarray*}\]</span></p>
+</section>
+<section id="the-log-likelihood" class="level2">
+<h2 class="anchored" data-anchor-id="the-log-likelihood">The Log Likelihood</h2>
+<p><span class="math display">\[\begin{eqnarray*}
+Loglik(\beta \tau | y, X)&amp; = &amp; \sum_{i=1}^N \sum_{k=1}^K log[F(\tau_k-\alpha-X_i\beta)-F(\tau_{k-1}-\alpha-X_i\beta)] \\
+\end{eqnarray*}\]</span></p>
+<ul>
+<li><p>Like the binary case: <span class="math inline">\(x \rightarrow y_{latent} \rightarrow y_{obs}\)</span>.</p></li>
+<li><p>The only thing that is different is that instead of a single cutpoint – at 0 – we have a series of cutpoints.</p></li>
+</ul>
+</section>
+<section id="parallel-lines" class="level2">
+<h2 class="anchored" data-anchor-id="parallel-lines">Parallel Lines</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(plotly)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Loading required package: ggplot2</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Attaching package: 'plotly'</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following object is masked from 'package:ggplot2':
+
+    last_plot</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following object is masked from 'package:stats':
+
+    filter</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following object is masked from 'package:graphics':
+
+    layout</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Create data for parallel lines using the logit function</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="sc">-</span><span class="dv">10</span>, <span class="dv">10</span>, <span class="at">length.out =</span> <span class="dv">100</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>logit <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="dv">1</span> <span class="sc">/</span> (<span class="dv">1</span> <span class="sc">+</span> <span class="fu">exp</span>(<span class="sc">-</span>x))</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Create y values for three parallel lines with different intercepts</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>y1 <span class="ot">&lt;-</span> <span class="fu">logit</span>(x <span class="sc">+</span> <span class="dv">1</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>y2 <span class="ot">&lt;-</span> <span class="fu">logit</span>(x <span class="sc">+</span> <span class="dv">3</span>)</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>y3 <span class="ot">&lt;-</span> <span class="fu">logit</span>(x <span class="sc">+</span> <span class="dv">5</span>)</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Create a data frame</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>data <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(x, y1, y2, y3)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot using Plotly</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>fig <span class="ot">&lt;-</span> <span class="fu">plot_ly</span>(data, <span class="at">x =</span> <span class="sc">~</span>x) <span class="sc">%&gt;%</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_trace</span>(<span class="at">y =</span> <span class="sc">~</span>y1, <span class="at">type =</span> <span class="st">'scatter'</span>, <span class="at">mode =</span> <span class="st">'lines'</span>, <span class="at">name =</span> <span class="st">'Line 1'</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_trace</span>(<span class="at">y =</span> <span class="sc">~</span>y2, <span class="at">type =</span> <span class="st">'scatter'</span>, <span class="at">mode =</span> <span class="st">'lines'</span>, <span class="at">name =</span> <span class="st">'Line 2'</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_trace</span>(<span class="at">y =</span> <span class="sc">~</span>y3, <span class="at">type =</span> <span class="st">'scatter'</span>, <span class="at">mode =</span> <span class="st">'lines'</span>, <span class="at">name =</span> <span class="st">'Line 3'</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">layout</span>(<span class="at">title =</span> <span class="st">'Parallel Lines using Logit Function'</span>,</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>         <span class="at">xaxis =</span> <span class="fu">list</span>(<span class="at">title =</span> <span class="st">'X-axis'</span>),</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>         <span class="at">yaxis =</span> <span class="fu">list</span>(<span class="at">title =</span> <span class="st">'Y-axis'</span>))</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>fig</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="plotly html-widget html-fill-item" id="htmlwidget-1c616eaad634a014bdca" style="width:100%;height:464px;"></div>
+<script type="application/json" data-for="htmlwidget-1c616eaad634a014bdca">{"x":{"visdat":{"118713a66170d":["function () ","plotlyVisDat"]},"cur_data":"118713a66170d","attrs":{"118713a66170d":{"x":{},"alpha_stroke":1,"sizes":[10,100],"spans":[1,20],"y":{},"type":"scatter","mode":"lines","name":"Line 1","inherit":true},"118713a66170d.1":{"x":{},"alpha_stroke":1,"sizes":[10,100],"spans":[1,20],"y":{},"type":"scatter","mode":"lines","name":"Line 2","inherit":true},"118713a66170d.2":{"x":{},"alpha_stroke":1,"sizes":[10,100],"spans":[1,20],"y":{},"type":"scatter","mode":"lines","name":"Line 3","inherit":true}},"layout":{"margin":{"b":40,"l":60,"t":25,"r":10},"title":"Parallel Lines using Logit Function","xaxis":{"domain":[0,1],"automargin":true,"title":"X-axis"},"yaxis":{"domain":[0,1],"automargin":true,"title":"Y-axis"},"hovermode":"closest","showlegend":true},"source":"A","config":{"modeBarButtonsToAdd":["hoverclosest","hovercompare"],"showSendToCloud":false},"data":[{"x":[-10,-9.7979797979797976,-9.5959595959595951,-9.3939393939393945,-9.191919191919192,-8.9898989898989896,-8.7878787878787872,-8.5858585858585865,-8.3838383838383841,-8.1818181818181817,-7.9797979797979792,-7.7777777777777777,-7.5757575757575761,-7.3737373737373737,-7.1717171717171713,-6.9696969696969697,-6.7676767676767682,-6.5656565656565657,-6.3636363636363633,-6.1616161616161618,-5.9595959595959593,-5.7575757575757578,-5.5555555555555554,-5.3535353535353538,-5.1515151515151514,-4.9494949494949498,-4.7474747474747474,-4.5454545454545459,-4.3434343434343434,-4.1414141414141419,-3.9393939393939394,-3.7373737373737379,-3.5353535353535355,-3.333333333333333,-3.1313131313131315,-2.9292929292929291,-2.7272727272727275,-2.5252525252525251,-2.3232323232323235,-2.1212121212121211,-1.9191919191919187,-1.717171717171718,-1.5151515151515156,-1.3131313131313131,-1.1111111111111107,-0.90909090909091006,-0.70707070707070763,-0.50505050505050519,-0.30303030303030276,-0.10101010101010033,0.10101010101010033,0.30303030303030276,0.50505050505050519,0.70707070707070763,0.90909090909090828,1.1111111111111107,1.3131313131313131,1.5151515151515156,1.7171717171717162,1.9191919191919187,2.1212121212121211,2.3232323232323235,2.5252525252525242,2.7272727272727266,2.9292929292929291,3.1313131313131315,3.3333333333333339,3.5353535353535346,3.737373737373737,3.9393939393939394,4.1414141414141419,4.3434343434343425,4.545454545454545,4.7474747474747474,4.9494949494949498,5.1515151515151505,5.3535353535353529,5.5555555555555554,5.7575757575757578,5.9595959595959584,6.1616161616161627,6.3636363636363633,6.565656565656564,6.7676767676767682,6.9696969696969688,7.171717171717173,7.3737373737373737,7.5757575757575744,7.7777777777777786,7.9797979797979792,8.1818181818181799,8.3838383838383841,8.5858585858585847,8.787878787878789,8.9898989898989896,9.1919191919191903,9.3939393939393945,9.5959595959595951,9.7979797979797993,10],"y":[0.00012339457598623172,0.00015101508515221734,0.00018481699660097167,0.0002261831242174684,0.00027680534191564633,0.00033875351792465749,0.0004145597543996538,0.00050732129563597168,0.00062082618979176249,0.00075970665671569991,0.0009296261533112874,0.0011375073648176831,0.0013918098129428744,0.0017028674854477161,0.0020832988757500926,0.0025485040812767627,0.0031172661270996932,0.0038124763968195603,0.0046620068384419277,0.005699754236697001,0.0069668839124894313,0.0085133010953921378,0.010399376944046072,0.012697951308046244,0.015496623724768321,0.018900324865165012,0.023034128681885445,0.028046215717659716,0.034110824206964062,0.041430921089968611,0.050240184162147719,0.060803707411619681,0.073416630912783026,0.08839967720705845,0.10609039614320445,0.12682886280844469,0.15093676035290007,0.1786893601788383,0.21028102179531874,0.24578651673774468,0.28512257494140081,0.3280160938691386,0.37398666873187658,0.42235060544315989,0.47225076494548685,0.52271163326063885,0.57271312061666191,0.62127171177032281,0.667515572897731,0.7107418823348397,0.75044932025243094,0.78634453633237078,0.81832653327149996,0.84645595535434559,0.87091698177216548,0.89197843865658066,0.90995874532806176,0.9251971950590383,0.93803233576844613,0.94878704852348061,0.95775929347237487,0.96521727323003037,0.97139780272451681,0.97650684659159426,0.98072140337342339,0.98419212870157624,0.9870462724693041,0.98939064973302637,0.99131447301382447,0.99289195026498278,0.99418460467693726,0.99524330598414024,0.99611002328723364,0.99681932072294288,0.99739962265992965,0.99787427665613715,0.99826244169307798,0.99857982721861327,0.99883930594064763,0.99905142053196805,0.99922480167688987,0.99936651234921592,0.99948233092373762,0.99957698371187842,0.99965433577209895,0.99971754735909768,0.99976920211756359,0.9998114120688274,0.9998459035551166,0.99987408757094653,0.99989711730166231,0.9999159351852247,0.99993131139762681,0.99994387532003681,0.99995414126430382,0.99996252950231868,0.99996938345506448,0.99997498374170146,0.99997955966163143,0.99998329857815205],"type":"scatter","mode":"lines","name":"Line 1","marker":{"color":"rgba(31,119,180,1)","line":{"color":"rgba(31,119,180,1)"}},"error_y":{"color":"rgba(31,119,180,1)"},"error_x":{"color":"rgba(31,119,180,1)"},"line":{"color":"rgba(31,119,180,1)"},"xaxis":"x","yaxis":"y","frame":null},{"x":[-10,-9.7979797979797976,-9.5959595959595951,-9.3939393939393945,-9.191919191919192,-8.9898989898989896,-8.7878787878787872,-8.5858585858585865,-8.3838383838383841,-8.1818181818181817,-7.9797979797979792,-7.7777777777777777,-7.5757575757575761,-7.3737373737373737,-7.1717171717171713,-6.9696969696969697,-6.7676767676767682,-6.5656565656565657,-6.3636363636363633,-6.1616161616161618,-5.9595959595959593,-5.7575757575757578,-5.5555555555555554,-5.3535353535353538,-5.1515151515151514,-4.9494949494949498,-4.7474747474747474,-4.5454545454545459,-4.3434343434343434,-4.1414141414141419,-3.9393939393939394,-3.7373737373737379,-3.5353535353535355,-3.333333333333333,-3.1313131313131315,-2.9292929292929291,-2.7272727272727275,-2.5252525252525251,-2.3232323232323235,-2.1212121212121211,-1.9191919191919187,-1.717171717171718,-1.5151515151515156,-1.3131313131313131,-1.1111111111111107,-0.90909090909091006,-0.70707070707070763,-0.50505050505050519,-0.30303030303030276,-0.10101010101010033,0.10101010101010033,0.30303030303030276,0.50505050505050519,0.70707070707070763,0.90909090909090828,1.1111111111111107,1.3131313131313131,1.5151515151515156,1.7171717171717162,1.9191919191919187,2.1212121212121211,2.3232323232323235,2.5252525252525242,2.7272727272727266,2.9292929292929291,3.1313131313131315,3.3333333333333339,3.5353535353535346,3.737373737373737,3.9393939393939394,4.1414141414141419,4.3434343434343425,4.545454545454545,4.7474747474747474,4.9494949494949498,5.1515151515151505,5.3535353535353529,5.5555555555555554,5.7575757575757578,5.9595959595959584,6.1616161616161627,6.3636363636363633,6.565656565656564,6.7676767676767682,6.9696969696969688,7.171717171717173,7.3737373737373737,7.5757575757575744,7.7777777777777786,7.9797979797979792,8.1818181818181799,8.3838383838383841,8.5858585858585847,8.787878787878789,8.9898989898989896,9.1919191919191903,9.3939393939393945,9.5959595959595951,9.7979797979797993,10],"y":[0.00091105119440064539,0.0011147833441199496,0.0013640125215336391,0.0016688681177159336,0.0020417193684422754,0.0024976630175477898,0.0030551133692573265,0.0037365143339650763,0.0045691958590474528,0.0055863997907026151,0.006828502361184376,0.0083444615365500519,0.010193516460848633,0.012447161795007164,0.015191409838007068,0.018529335068062151,0.022583865261700569,0.027500735600776583,0.033451451055118181,0.040636001172127081,0.049284934325518837,0.059660223019174806,0.072054143618564021,0.086785173649676403,0.10418972279494806,0.12460843924642248,0.14836598933874684,0.17574374289308001,0.20694584934715762,0.24206081755024075,0.28102278025633637,0.32357870183457932,0.36926912882296675,0.41742979353768545,0.46721880785976294,0.51766940678843576,0.56776232353834344,0.61650680270111735,0.66301689495897198,0.70657097684341297,0.74664687466621982,0.78293082812505821,0.81530379900906558,0.84381191773073183,0.86862879046919328,0.89001644553267256,0.90828975065421802,0.92378700149102944,0.93684759571234577,0.9477964814295412,0.95693439151148441,0.96453262175983989,0.97083113028529056,0.97603889875903294,0.98033571260902796,0.98387473215452137,0.98678541307709944,0.98917648321794316,0.99113879409567307,0.9927479449724177,0.99406663137424311,0.99514670505046499,0.99603095381574691,0.99675462178723284,0.9973466963609805,0.99783099013049426,0.99822704540520779,0.99855088709473039,0.99881564717414228,0.99903208116946851,0.99920899436004507,0.99935359283064562,0.99947177219203265,0.99956835474925843,0.99964728413056281,0.99971178487883849,0.99976449322775529,0.9998075642083728,0.99984275933223121,0.99987151834795962,0.99989501794731028,0.9999142197828611,0.99992990973582507,0.99994273002335099,0.99995320544768507,0.99996176485379396,0.9999687586686028,0.99997447323638955,0.9999791425349005,0.99998295775032675,0.99998607510213466,0.99998862223745688,0.99999070345639673,0.99999240398191336,0.99999379344891082,0.99999492875527785,0.99999585639152544,0.9999966143443636,0.9999972336521249,0.99999773967570205],"type":"scatter","mode":"lines","name":"Line 2","marker":{"color":"rgba(255,127,14,1)","line":{"color":"rgba(255,127,14,1)"}},"error_y":{"color":"rgba(255,127,14,1)"},"error_x":{"color":"rgba(255,127,14,1)"},"line":{"color":"rgba(255,127,14,1)"},"xaxis":"x","yaxis":"y","frame":null},{"x":[-10,-9.7979797979797976,-9.5959595959595951,-9.3939393939393945,-9.191919191919192,-8.9898989898989896,-8.7878787878787872,-8.5858585858585865,-8.3838383838383841,-8.1818181818181817,-7.9797979797979792,-7.7777777777777777,-7.5757575757575761,-7.3737373737373737,-7.1717171717171713,-6.9696969696969697,-6.7676767676767682,-6.5656565656565657,-6.3636363636363633,-6.1616161616161618,-5.9595959595959593,-5.7575757575757578,-5.5555555555555554,-5.3535353535353538,-5.1515151515151514,-4.9494949494949498,-4.7474747474747474,-4.5454545454545459,-4.3434343434343434,-4.1414141414141419,-3.9393939393939394,-3.7373737373737379,-3.5353535353535355,-3.333333333333333,-3.1313131313131315,-2.9292929292929291,-2.7272727272727275,-2.5252525252525251,-2.3232323232323235,-2.1212121212121211,-1.9191919191919187,-1.717171717171718,-1.5151515151515156,-1.3131313131313131,-1.1111111111111107,-0.90909090909091006,-0.70707070707070763,-0.50505050505050519,-0.30303030303030276,-0.10101010101010033,0.10101010101010033,0.30303030303030276,0.50505050505050519,0.70707070707070763,0.90909090909090828,1.1111111111111107,1.3131313131313131,1.5151515151515156,1.7171717171717162,1.9191919191919187,2.1212121212121211,2.3232323232323235,2.5252525252525242,2.7272727272727266,2.9292929292929291,3.1313131313131315,3.3333333333333339,3.5353535353535346,3.737373737373737,3.9393939393939394,4.1414141414141419,4.3434343434343425,4.545454545454545,4.7474747474747474,4.9494949494949498,5.1515151515151505,5.3535353535353529,5.5555555555555554,5.7575757575757578,5.9595959595959584,6.1616161616161627,6.3636363636363633,6.565656565656564,6.7676767676767682,6.9696969696969688,7.171717171717173,7.3737373737373737,7.5757575757575744,7.7777777777777786,7.9797979797979792,8.1818181818181799,8.3838383838383841,8.5858585858585847,8.787878787878789,8.9898989898989896,9.1919191919191903,9.3939393939393945,9.5959595959595951,9.7979797979797993,10],"y":[0.0066928509242848554,0.0081789428562821613,0.0099916899362080588,0.012201264260636075,0.014892116363260341,0.018165492507155691,0.022142203958132146,0.026965570368090212,0.032804390909942818,0.039855698945889695,0.048346922719897809,0.058536902874367899,0.070715012027143642,0.085197401061588379,0.10231920350807022,0.12242143898621305,0.14583148353491501,0.17283646446618905,0.2036499335022193,0.23837374421039675,0.27695909778815886,0.31917282672147035,0.36457644074163931,0.41252537040181819,0.46219351092684902,0.51262357943007497,0.56279795369438246,0.61171941140716124,0.65848848940252069,0.70236511502557752,0.74280634723561778,0.7794778729544305,0.81224231094517951,0.8411308951190849,0.86630626410614642,0.88802329038025296,0.90659299528316784,0.92235245391657517,0.9356417590466013,0.94678782922608895,0.95609411885006113,0.96383499877981238,0.97025357461592576,0.97556186338166717,0.97994246346214953,0.98355106930658209,0.98651937229915421,0.98895804166250523,0.99095959419106694,0.99260104395028037,0.99394627939345837,0.99504815206560837,0.99595028367562977,0.99668861116732732,0.9972926957603816,0.99778682410771702,0.99819092935635756,0.99852135810545573,0.99879150674754447,0.99901234791145366,0.99919286497151605,0.9993404100018195,0.99946099821337242,0.99955954984498185,0.99964008868547005,0.99970590486945987,0.99975968828718109,0.99980363785338222,0.99983955096412114,0.99986889670726231,0.99989287575955066,0.99991246937955591,0.99992847947371377,0.9999415613567707,0.99995225053522985,0.99996098460193872,0.99996812113264033,0.99997395231349717,0.99997871689603068,0.99998260996730992,0.9999857909343467,0.99998839004889428,0.99999051373933501,0.99999224896766326,0.99999366678975676,0.99999482526457883,0.99999577183134991,0.99999654525196324,0.99999717719814474,0.99999769354832591,0.99999811544731265,0.9999984601721349,0.99999874183952464,0.99999897198398868,0.99999916003014266,0.99999931367864969,0.99999943922156442,0.99999954179999417,0.99999962561463129,0.99999969409777301],"type":"scatter","mode":"lines","name":"Line 3","marker":{"color":"rgba(44,160,44,1)","line":{"color":"rgba(44,160,44,1)"}},"error_y":{"color":"rgba(44,160,44,1)"},"error_x":{"color":"rgba(44,160,44,1)"},"line":{"color":"rgba(44,160,44,1)"},"xaxis":"x","yaxis":"y","frame":null}],"highlight":{"on":"plotly_click","persistent":false,"dynamic":false,"selectize":false,"opacityDim":0.20000000000000001,"selected":{"opacity":1},"debounce":0},"shinyEvents":["plotly_hover","plotly_click","plotly_selected","plotly_relayout","plotly_brushed","plotly_brushing","plotly_clickannotation","plotly_doubleclick","plotly_deselect","plotly_afterplot","plotly_sunburstclick"],"base_url":"https://plot.ly"},"evals":[],"jsHooks":[]}</script>
+</div>
+</div>
+</section>
+<section id="estimation" class="level2">
+<h2 class="anchored" data-anchor-id="estimation">Estimation</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Attaching package: 'dplyr'</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following objects are masked from 'package:stats':
+
+    filter, lag</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following objects are masked from 'package:base':
+
+    intersect, setdiff, setequal, union</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(MASS)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Attaching package: 'MASS'</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following object is masked from 'package:dplyr':
+
+    select</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>The following object is masked from 'package:plotly':
+
+    select</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">load</span>(<span class="st">"~/Dropbox/github_repos/teaching/POL683_Fall24/advancedRegression/vignettes/dataActive.rda"</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>dat <span class="ot">=</span> dataActive <span class="sc">%&gt;%</span> </span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">pid =</span> <span class="fu">recode</span>(pid3, <span class="st">"Democrat"</span> <span class="ot">=</span> <span class="dv">1</span>, <span class="st">"Independent"</span> <span class="ot">=</span> <span class="dv">2</span>, <span class="st">"Republican"</span> <span class="ot">=</span> <span class="dv">3</span>, <span class="st">"Other"</span> <span class="ot">=</span> <span class="dv">2</span>, <span class="st">"Not sure"</span> <span class="ot">=</span> <span class="dv">2</span>),</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">ideo =</span> <span class="fu">ifelse</span>(ideo5 <span class="sc">==</span> <span class="st">"Very liberal"</span>, <span class="dv">1</span>, <span class="dv">0</span>),</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">liberal =</span> <span class="fu">ifelse</span>(ideo5 <span class="sc">==</span> <span class="st">"Liberal"</span> <span class="sc">|</span> ideo5 <span class="sc">==</span> <span class="st">"Very liberal"</span>, <span class="dv">1</span>, <span class="dv">0</span>),</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">independent =</span> <span class="fu">ifelse</span>(ideo5 <span class="sc">==</span> <span class="st">"Moderate"</span>, <span class="dv">1</span>, <span class="dv">0</span>),</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">conservative =</span> <span class="fu">ifelse</span>(ideo5 <span class="sc">==</span> <span class="st">"Conservative"</span> <span class="sc">|</span> ideo5 <span class="sc">==</span> <span class="st">"Very conservative"</span>, <span class="dv">1</span>, <span class="dv">0</span>),</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">int1 =</span> conservative<span class="sc">*</span>authoritarianism,</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">int2 =</span> independent<span class="sc">*</span>authoritarianism,</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>  ) </span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>my_model <span class="ot">=</span> <span class="fu">polr</span>(<span class="fu">as.factor</span>(pid) <span class="sc">~</span> conservative <span class="sc">+</span> independent <span class="sc">+</span> authoritarianism <span class="sc">+</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>                  int1 <span class="sc">+</span> int2, <span class="at">data =</span> dat)</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(my_model)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Re-fitting to get Hessian</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Call:
+polr(formula = as.factor(pid) ~ conservative + independent + 
+    authoritarianism + int1 + int2, data = dat)
+
+Coefficients:
+                  Value Std. Error t value
+conservative      3.683     0.1673  22.022
+independent       1.543     0.1210  12.755
+authoritarianism  1.177     0.1532   7.687
+int1             -1.220     0.2653  -4.600
+int2             -1.582     0.2272  -6.965
+
+Intercepts:
+    Value   Std. Error t value
+1|2  0.6430  0.0769     8.3661
+2|3  3.1383  0.0965    32.5227
+
+Residual Deviance: 6335.462 
+AIC: 6349.462 
+(2 observations deleted due to missingness)</code></pre>
+</div>
+</div>
+</section>
+<section id="interpretation" class="level2">
+<h2 class="anchored" data-anchor-id="interpretation">Interpretation</h2>
+<ul>
+<li><p>How do we make sense of this?</p></li>
+<li><p>Follow the same protocol as before.</p></li>
+<li><p>Simulate data, generate predictions, and interpret the results.</p></li>
+</ul>
+</section>
+<section id="simulating-data-generating-predictions" class="level2">
+<h2 class="anchored" data-anchor-id="simulating-data-generating-predictions">Simulating Data, Generating Predictions</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ forcats   1.0.0     ✔ stringr   1.5.1
+✔ lubridate 1.9.4     ✔ tibble    3.3.0
+✔ purrr     1.1.0     ✔ tidyr     1.3.1
+✔ readr     2.1.5     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks plotly::filter(), stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+✖ MASS::select()  masks dplyr::select(), plotly::select()
+ℹ Use the conflicted package (&lt;http://conflicted.r-lib.org/&gt;) to force all conflicts to become errors</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggridges)</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Generate prediction data</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>newdat <span class="ot">=</span>  <span class="fu">expand.grid</span>(<span class="at">conservative =</span> <span class="dv">1</span>,</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">independent =</span> <span class="dv">0</span>,</span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>                                 <span class="at">authoritarianism =</span> <span class="fu">c</span>(<span class="dv">0</span>,<span class="dv">1</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>            <span class="fu">mutate</span>(</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>              <span class="at">int1 =</span> conservative<span class="sc">*</span>authoritarianism,</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>              <span class="at">int2 =</span> independent<span class="sc">*</span>authoritarianism</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>  ) <span class="do">##j x 6</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>parameters <span class="ot">=</span> <span class="fu">mvrnorm</span>(<span class="dv">1000</span>, <span class="fu">c</span>(<span class="fu">coefficients</span>(my_model),  my_model<span class="sc">$</span>zeta), <span class="fu">vcov</span>(my_model)) <span class="sc">%&gt;%</span> <span class="fu">as.data.frame</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>
+Re-fitting to get Hessian</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Keep parameters if in newdat</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">authoritarianism =</span> <span class="dv">1</span>,</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">categoryDem =</span> <span class="fu">plogis</span>(parameters<span class="sc">$</span><span class="st">`</span><span class="at">1|2</span><span class="st">`</span> <span class="sc">-</span> <span class="fu">as.matrix</span>(parameters[,<span class="fu">names</span>(parameters) <span class="sc">%in%</span> <span class="fu">names</span>(newdat)]) <span class="sc">%*%</span> <span class="fu">t</span>(<span class="fu">as.matrix</span>(newdat))[,<span class="dv">1</span>]) ,</span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">categoryInd =</span> <span class="fu">plogis</span>(parameters<span class="sc">$</span><span class="st">`</span><span class="at">2|3</span><span class="st">`</span> <span class="sc">-</span> <span class="fu">as.matrix</span>(parameters[,<span class="fu">names</span>(parameters) <span class="sc">%in%</span> <span class="fu">names</span>(newdat)]) <span class="sc">%*%</span> <span class="fu">t</span>(<span class="fu">as.matrix</span>(newdat))[,<span class="dv">1</span>]),</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">categoryRep =</span> <span class="dv">1</span> <span class="sc">-</span> <span class="fu">plogis</span>(parameters<span class="sc">$</span><span class="st">`</span><span class="at">2|3</span><span class="st">`</span> <span class="sc">-</span> <span class="fu">as.matrix</span>(parameters[,<span class="fu">names</span>(parameters) <span class="sc">%in%</span> <span class="fu">names</span>(newdat)]) <span class="sc">%*%</span> <span class="fu">t</span>(<span class="fu">as.matrix</span>(newdat))[,<span class="dv">1</span>]) </span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">starts_with</span>(<span class="st">"category"</span>), <span class="at">names_to =</span> <span class="st">"category"</span>, <span class="at">values_to =</span> <span class="st">"value"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> value, <span class="at">y =</span> category, <span class="at">fill =</span> category)) <span class="sc">+</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density_ridges</span>(<span class="at">alpha =</span> <span class="fl">0.7</span>, <span class="at">color =</span> <span class="st">"white"</span>) <span class="sc">+</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_ridges</span>() <span class="sc">+</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Partisanship among Authoritarians"</span>, <span class="at">x =</span> <span class="st">"Probability"</span>, <span class="at">y =</span> <span class="st">"PID"</span>) <span class="sc">+</span> </span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"blue"</span>, <span class="st">"purple"</span>, <span class="st">"red"</span>)) </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Picking joint bandwidth of 0.00529</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="regression_functions_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
