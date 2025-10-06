@@ -123,8 +123,7 @@ The only thing that is different is that instead of a single cutpoint -- at 0 --
 
 The parallel lines assumption means that the effect of $X$ is the same across all categories.
 
-```{r}
-devtools::load_all()
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
 library(plotly)
 x <- seq(-10, 10, length.out = 100)
 logit <- function(x) 1 / (1 + exp(-x))
@@ -156,8 +155,7 @@ Let's estimate an ordered logit model in `R`, from the `MASS` package. Data are 
 ```{r, warning = FALSE, message = FALSE, echo = TRUE}
 library(dplyr)
 library(tidyr)
-# Build package
-devtools::load_all()
+library(MASS)
 
 download.file("https://raw.githubusercontent.com/crweber9874/advancedRegression/main/data/wss20.rda",
               destfile = "wss20.rda")
@@ -189,17 +187,21 @@ my_model |> summary()
 
 There is clearly an interaction effect -- support varies depending on whether the observation was before or after the election **and** whether the respondent voted for Trump or Biden. The sign of the lower order and interaction terms seems to indicate that Trump supporters are more supportive, post-election; Biden voters are more supporting in the pre-election. But how should we interpret this.
 
-In the `weberUtilities` package, there are functions to generate predicted probabilities from an ordered logit or probit model. We can use these to generate predicted probabilities for each category, across levels of `prepost` and `vote_trump`. If you first install the `devtools` package, you can install `weberUtilities` from GitHub:
+In the `regressionEffects` package, there are functions to generate predicted probabilities from an ordered logit or probit model. We can use these to generate predicted probabilities for each category, across levels of `prepost` and `vote_trump`. If you first install the `devtools` package, you can install `regressionEffects` from GitHub:
 
 Instead of loading the entire package into your workspace with `devtools::`, this allows one to estimate a function from within the package. 
 
 ```{r}
-devtools::install_github("crweber9874/regressionEffects", force = TRUE)
+# devtools::install_github("crweber9874/regressionEffects")
 library(regressionEffects)
 ```
 
+There's nothing terribly complex about the functions in the package. They basically just provide a workflow that includes wrappers for using other packages, like `MASS`, `dplyr`, and `ggplot2`. 
 
-```{r}
+First, create a **design** matrix corresponding to the things (from the model) that you'd like to predict. Here, let's predict the probability of attending a march, across levels of `prepost` and `vote_trump`.
+
+```{r, warning = FALSE, message = FALSE, echo = TRUE}
+library(regressionEffects)
 design_matrix <- expand.grid(
    prepost = c(0,1),
    vote_trump = c(0,1)
@@ -209,6 +211,54 @@ predictions <- predict_ordinal_probs(
   design_matrix = design_matrix,
   model = my_model,
   n_draws = 1000)
+cat("The dimensions of this matrix:\n",
+    dim(predictions)[1], "rows and", 
+    dim(predictions)[2], "columns.")
+head(predictions)
+```
+
+Let's now create summaries.
+
+```{r, warning = FALSE, message = FALSE, echo = TRUE}
+summarize_predictions(predictions) |> head()
+```
+```{r}
+library(tidyverse)  # This loads ggplot2, dplyr, tidyr, etc.
+library(regressionEffects)  # or library(weberUtilties)
+
+# Create the plot
+summarize_predictions(predictions)  %>%
+  mutate(
+    prepost_label = factor(prepost, 
+                          levels = c(0, 1), 
+                          labels = c("Pre-Election", "Post-Election")),
+    vote_trump_label = factor(vote_trump,
+                             levels = c(0, 1),
+                             labels = c("Biden Voters", "Trump Voters")),
+    category = factor(category)
+  ) %>%
+  ggplot(aes(x = prepost_label, y = mean_prob, color = category, group = category)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci),
+                  position = position_dodge(width = 0.5),
+                  size = 0.8,
+                  linewidth = 1) +
+  facet_wrap(~vote_trump_label, ncol = 2) +
+  labs(
+    x = "",
+    y = "Predicted Probability",
+    color = "Response\nCategory",
+    title = "Predicted Probabilities by Election Period and Vote Choice",
+    subtitle = "Points show mean probability with 95% confidence intervals"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    panel.grid.major.x = element_blank(),
+    strip.text = element_text(size = 12, face = "bold")
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1))
+
 ```
 
 ```{r, echo = TRUE}
