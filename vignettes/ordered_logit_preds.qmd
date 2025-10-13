@@ -123,8 +123,7 @@ The only thing that is different is that instead of a single cutpoint -- at 0 --
 
 The parallel lines assumption means that the effect of $X$ is the same across all categories.
 
-```{r}
-devtools::load_all()
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
 library(plotly)
 x <- seq(-10, 10, length.out = 100)
 logit <- function(x) 1 / (1 + exp(-x))
@@ -149,15 +148,14 @@ fig
 Each line corresponds to a log odds of combining categories into a **cumulative log odds** where the lines are parallel, *or the odds ratios are constant, they are proportional*. The distance between the lines is constant, which means that the effect of $X$ is the same across all categories.
 
 
-## Estimation
+Let's estimate an ordered logit model in `R`, from the `MASS` package. Data are collected **pre** or **post** election, and we want to see if support for electoral contestation behavior (here, attending a march) changes in support over this period -- for Trump voters versus Biden voters. This is specified to examine whether support for contestation varies depending upon electoral functions; a **winner-loser effect**.
 
-Let's estimate an ordered logit model in `R`, from the `MASS` package. Data are collected **pre** or **post** election, and we want to see if support for electoral contestation behavior (here, attending a march) changes in support over this period -- for Trump voters versus Biden voters. This is specified to examine whether support for contestation varies depending upon electoral functions; a **winner-loser effect**
+### Estimation 
 
 ```{r, warning = FALSE, message = FALSE, echo = TRUE}
 library(dplyr)
 library(tidyr)
-# Build package
-devtools::load_all()
+library(MASS)
 
 download.file("https://raw.githubusercontent.com/crweber9874/advancedRegression/main/data/wss20.rda",
               destfile = "wss20.rda")
@@ -170,9 +168,10 @@ wss20 = wss20 |>
     values_from = contestation_value
   )
 
-sample_df <- wss20 |>
-  mutate(contestation = rowMeans(cbind(attend_march, criticize_election, burn_flag, court, recount), na.rm = 
-                                   TRUE), # Construct a continuous scale
+westernData <- wss20 |>
+  mutate(contestation = rowMeans(cbind(attend_march, criticize_election, 
+                                       burn_flag, court, recount),
+                                 na.rm = TRUE), 
         vote_trump = presvote_trump_2020,
         authoritarianism = rowMeans(cbind(auth_1, auth_2, auth_3, auth_4), na.rm = TRUE),
         republican = ifelse(party_identification3 == 3, 1, 0),
@@ -181,10 +180,27 @@ sample_df <- wss20 |>
         libcon = (ideology5 - 1)/4,
         prepost = ifelse(prepost == "post", 1, 0)
 )
-my_model = polr(as.factor(attend_march) ~ prepost*vote_trump , 
-               data = sample_df)
+```
 
-my_model |> summary()
+Having prepared the data, estimate models. 
+
+### The Model Estimation Block
+
+```{r, warning = FALSE, message = FALSE, echo = TRUE}
+### Estimate
+
+attend_march = polr(as.factor(party_identification3) ~ prepost*vote_trump , 
+               data = westernData)
+criticize_election = polr(as.factor(criticize_election) ~ prepost*vote_trump , 
+               data = westernData)
+burn_flag = polr(as.factor(burn_flag) ~ prepost*vote_trump , 
+               data = westernData)
+court  = polr(as.factor(court) ~ prepost*vote_trump , 
+               data = westernData)
+recount = polr(as.factor(recount) ~ prepost*vote_trump , 
+               data = westernData)
+
+summary(attend_march)
 ```
 
 There is clearly an interaction effect -- support varies depending on whether the observation was before or after the election **and** whether the respondent voted for Trump or Biden. The sign of the lower order and interaction terms seems to indicate that Trump supporters are more supportive, post-election; Biden voters are more supporting in the pre-election. But how should we interpret this.
@@ -193,42 +209,275 @@ In the `regressionEffects` package, there are functions to generate predicted pr
 
 Instead of loading the entire package into your workspace with `devtools::`, this allows one to estimate a function from within the package. 
 
-```{r}
-devtools::install_github("crweber9874/regressionEffects")
-library(regressionEffects)
-```
 
 There's nothing terribly complex about the functions in the package. They basically just provide a workflow that includes wrappers for using other packages, like `MASS`, `dplyr`, and `ggplot2`. 
 
 First, create a **design** matrix corresponding to the things (from the model) that you'd like to predict. Here, let's predict the probability of attending a march, across levels of `prepost` and `vote_trump`.
 
+### Post Estimation Block
+
 ```{r, warning = FALSE, message = FALSE, echo = TRUE}
+devtools::load_all()
 design_matrix <- expand.grid(
    prepost = c(0,1),
    vote_trump = c(0,1)
  )
-
-predictions <- predict_ordinal_probs(
+### Predictions
+predictions_march <- predict_ordinal_probs(
   design_matrix = design_matrix,
-  model = my_model,
+  model = attend_march,
   n_draws = 1000)
+predictions_criticize <- predict_ordinal_probs(
+  design_matrix = design_matrix,
+  model = criticize_election,
+  n_draws = 1000)
+predictions_burn <- predict_ordinal_probs(
+  design_matrix = design_matrix,
+  model = burn_flag,
+  n_draws = 1000)
+predictions_court <- predict_ordinal_probs(
+  design_matrix = design_matrix,
+  model = court,
+  n_draws = 1000)
+predictions_recount <- predict_ordinal_probs(
+  design_matrix = design_matrix,
+  model = recount,
+  n_draws = 1000)
+
 cat("The dimensions of this matrix:\n",
-    dim(predictions)[1], "rows and", 
-    dim(predictions)[2], "columns.")
-head(predictions)
+    dim(predictions_recount)[1], "rows and", 
+    dim(predictions_recount)[2], "columns.")
+
+head(predictions_recount)
 ```
 
 Let's now create summaries.
 
 ```{r, warning = FALSE, message = FALSE, echo = TRUE}
-summarize_predictions(predictions) |> head()
+summarize_predictions(predictions_march) |> head()
 ```
+
+
+This is useful but sort of messy, because we don't know how many observations are in each of the cells. All we can see is that support for attending a march increases after the election (for Trump voters), but the opposite occurs for Biden voters. Let's scale the points by the number of observations.
+
+### Data Summarization Block
+
+This simplifies things by using `prepare_prediction_data`, which generates a list, the plot data and the observed counts.
+```{r, cache = FALSE}
+
+plot_burn  <- prepare_prediction_data(westernData, predictions_burn)
+plot_court <- prepare_prediction_data(westernData, predictions_court)
+plot_criticize <- prepare_prediction_data(westernData, predictions_criticize)
+plot_march  <- prepare_prediction_data(westernData, predictions_march)
+plot_recount <- prepare_prediction_data(westernData, predictions_recount)
+```
+
+### Sunflower Plots
+
+The sunflower plot follows the structure: 
+
+* From the plot data, extract the probabilities, relabel the variables, filter to only include one group.
+
+* Within the `plotSunflower` function, the observed counts are joined to the predicted probabilities, and a ggplot is created.
+
+* Each sunflower point is scaled by the number of observations in that cell.
+
+The Pre/Post comparisons can be presented like this, 
+
 ```{r}
-library(tidyverse)  # This loads ggplot2, dplyr, tidyr, etc.
-library(regressionEffects)  # or library(weberUtilties)
+plotDots(plot_burn$plotting_data |>
+          filter(vote_trump == 1), 
+          y_var = "mean_prob",
+          color_var = "prepost",
+          color_levels = c(0, 1),
+          color_labels = c("Pre", "Post"),
+          color_values = c("grey", "black"),
+          title = "Flag Burning",
+)
+```
+Or like this, 
+
+
+```{r}
+library(dplyr)
+plotSunflowerDots(
+  list(
+    plotting_data = plot_burn$plotting_data |> filter(vote_trump == 1),
+    observed_counts = plot_burn$observed_counts |> filter(vote_trump == 1)
+  ),
+  join_vars = c("category", "prepost"),
+  color_levels = c(1, 0),
+  color_labels = c("Post", "Pre"),
+  color_values = c("grey", "black"),
+  title = "Flag Burning\nTrump Voters",
+  x_label = "",
+  y_label = "Predicted Probability",
+  mean_point_size = 2,
+  mean_point_alpha = 0.1,
+  sunflower_size = 0.15,
+  sunflower_alpha = 0.3,
+  y_limits = c(0, 0.6),
+  dodge_width = 0.65,
+  sunflower_density = 50,
+  sunflower_aspect_ratio = 10,
+)
+```
+
+Or like this,
+
+
+```{r}
+devtools::load_all()
+library(ggplot2)
+# Plot Trump voters
+plot_dat_labeled <- plot_burn$plotting_data %>%
+    mutate(
+    prepost_label = factor(prepost, levels = c(0, 1), 
+                           labels = c("Pre-Election", "Post-Election"))
+    ) |> 
+  filter(vote_trump == 1) 
+
+plotSunflower(
+    pred_summary = plot_dat_labeled,
+    observed_counts = plot_burn$observed_counts |> filter(!is.na(vote_trump)) |> filter(vote_trump == 1),
+    x_var = "prepost_label",
+    join_vars = c("prepost", "vote_trump", "category"),
+    title = "Trump Voters"
+)
+```
+
+The information is identical, just conveyed in slighty different ways.
+
+
+```{r}
+library(ggplot2)
+
+create_combined_plot(
+  plot_data = plot_burn,
+  predictions = predictions_burn,
+  main_title = "Flag Burning",
+  subtitle = "Comparing Biden and Trump Voters Before and After the 2020 Election",
+  caption = "Source: Western States Survey 2020. Error bars show 95% credible intervals. N = 2,000 respondents.",
+  moderator = "vote_trump",
+  moderator_levels = c(0, 1),
+  group_labels = c("Biden Voters", "Trump Voters"),
+  join_vars = c("category", "prepost", "vote_trump")
+)
+ggsave("ordered_logit_sunflower.png", width = 8, height = 8)
+
+# create_combined_plot(
+#   plot_data = plot_burn, # must be list,
+#   predictions = predictions_burn,
+#   main_title = "Flag Burning",
+#   moderator = "vote_trump",
+#   moderator_levels = c(0, 1),
+#   group_labels = c("Biden Voters", "Trump Voters"),
+#   save_path = "burn.png",
+#   sunflower_params = list(
+#           sunflower_alpha = 0.25,
+#           sunflower_dodge = 0.5,
+#           sunflower_density = 60,
+#           sunflower_aspect_ratio = 0,
+#           sunflower_size = 0.01,
+#           errorbar_width = 0.05,
+#           category_labels = c("1" = "Strongly\nOppose",
+#                                               "2" = "Oppose",
+#                                               "3" = "Neutral",
+#                                               "4" = "Support",
+#                                               "5" = "Strongly\nSupport"))) 
+
+
+```
+
+```{r}
+library(ggplot2)
+devtools::load_all()
+biden = plotSunflower(plot_recount$plotting_data |> 
+                mutate(
+                  prepost_label = factor(prepost, levels = c(0, 1), 
+                    labels = c("Pre-Election", "Post-Election")),
+                  vote_trump_label = factor(vote_trump, levels = c(0, 1),
+                    labels = c("Biden Voters", "Trump Voters"))) |>
+             filter(vote_trump == 0), 
+             plot_recount$observed_counts,
+             sunflower_alpha = 0.25,
+             sunflower_dodge = 0.65,
+             sunflower_density = 60,
+             sunflower_aspect_ratio = 7,
+             sunflower_size = 0.01,
+             errorbar_width = 0.05,
+              title = "",
+              subtitle = "Biden Voters",
+              y_label = "Probability",
+              x_label = "",
+              legend_title = "")
+trump = plotSunflower(plot_recount$plotting_data |>  
+                    mutate(
+                    prepost_label = factor(prepost, levels = c(0, 1), 
+                    labels = c("Pre-Election", "Post-Election")),
+                    vote_trump_label = factor(vote_trump, levels = c(0, 1),
+                    labels = c("Biden Voters", "Trump Voters"))) |>
+                    filter(vote_trump == 1),
+             plot_recount$observed_counts,
+             sunflower_alpha = 0.25,
+             sunflower_dodge = 0.65,
+             sunflower_density = 60,
+             sunflower_aspect_ratio = 7,
+             sunflower_size = 0.01,
+             errorbar_width = 0.05,
+             title = "",
+             subtitle = "Trump Voters",
+             y_label = "Probability",
+             x_label = "",
+            legend_title = "")
+
+me = calculate_marginal_effect(
+  predictions_recount,,
+  focal_var = "prepost",
+  focal_contrast = c(0, 1),
+  moderator = "vote_trump"
+)
+trump_margins = plotMarginalEffects(me |> filter(vote_trump == 1),
+                                    point_size = 3,
+                                    title = "",
+                                    point_alpha = 0.5,
+                                    y_label = "",
+                                    x_label = "Marginal Effect")
+biden_margins = plotMarginalEffects(me |> filter(vote_trump == 0),
+                                    point_size = 3,
+                                    point_alpha = 0.5,
+                                    title = "",
+                                    y_label = "",
+                                    x_label = "")
+
+biden_no_legend <- biden + theme(legend.position = "none")
+trump_no_legend <- trump
+
+library(patchwork)
+biden_no_legend + biden_margins+
+trump_no_legend + trump_margins +
+  plot_layout(widths = c(0.9, 1),
+              heights = c(1, 1)) +
+  plot_annotation(title = "Election Recounts")
+
+  
+ggsave("ordered_logit_sunflower.png", width = 6, height = 5)
+```
+
+
+### Dot Plots
+
+
+
+
+
+## Simple Graph
+
+```{r}
+library(ggplot2)
 
 # Create the plot
-summarize_predictions(predictions)  %>%
+summarize_predictions(predictions_march) |>
   mutate(
     prepost_label = factor(prepost, 
                           levels = c(0, 1), 
@@ -243,7 +492,9 @@ summarize_predictions(predictions)  %>%
   geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci),
                   position = position_dodge(width = 0.5),
                   size = 0.8,
-                  linewidth = 1) +
+                  linewidth = 1,
+                  alpha = 0.5) +
+  geom_line( position = position_dodge(width = 0.5)) + 
   facet_wrap(~vote_trump_label, ncol = 2) +
   labs(
     x = "",
@@ -258,135 +509,258 @@ summarize_predictions(predictions)  %>%
     panel.grid.major.x = element_blank(),
     strip.text = element_text(size = 12, face = "bold")
   ) +
-  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1))
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1)) +
+scale_color_manual(values = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey", "4" = "darkslategrey", "5" = "black"),
+ labels = c("1" = "Strongly Not Support", "2" = "Not Support", "3" = "Neutral", "4" = "Support", "5" = "Strongly Support"))
+
 
 ```
 
-```{r, echo = TRUE}
+
+
+
+
+```{r, warning = FALSE, message = FALSE, echo = TRUE}
 library(dplyr)
-library(MASS)
-devtools::load_all()
-load("~/Dropbox/github_repos/teaching/POL683_Fall24/advancedRegression/vignettes/dataActive.rda")
-dat = dataActive %>% 
-  mutate(
-    pid = recode(pid3, "Democrat" = 1, "Independent" = 2, "Republican" = 3, "Other" = 2, "Not sure" = 2),
-    ideo = ifelse(ideo5 == "Very liberal", 1, 0),
-    liberal = ifelse(ideo5 == "Liberal" | ideo5 == "Very liberal", 1, 0),
-    independent = ifelse(ideo5 == "Moderate", 1, 0),
-    conservative = ifelse(ideo5 == "Conservative" | ideo5 == "Very conservative", 1, 0),
-    int1 = conservative*authoritarianism,
-    int2 = independent*authoritarianism,
-  ) 
-my_model = glm(conservative ~  pid3 + authoritarianism, 
-               data = dat,
-               family = binomial(link = "logit"))
 
-
-design_matrix <- expand.grid(
-   pid3 = c("Republican", "Democrat", "Independent"),
-   authoritarianism = c(0,1)
- )
-
-predictions <- predict_logit_probs(
-  design_matrix = design_matrix,
-  model = my_model,
-  n_draws = 1000)
-
-summarize_predictions(predictions)
+me = calculate_marginal_effect(
+  predictions,
+  focal_var = "prepost",
+  focal_contrast = c(0, 1),
+  moderator = "vote_trump"
+) 
+print(me)
 ```
 
-## Interpretation
-
--   How do we make sense of this?
-
--   Follow the same protocol as before.
-
--   Simulate data, generate predictions, and interpret the results.
-
-## Simulating Data, Generating Predictions
-
-- Finished: Point estimates for logit, ordered logit parameterization, summary function to summarize preds.
-
-- TD: Marginal Effects simulator.
 
 ```{r}
-library(dplyr)
-library(tidyr)
-devtools::load_all()
-load("~/Dropbox/github_repos/teaching/POL683_Fall24/advancedRegression/vignettes/dataActive.rda")
-dat = dataActive |>
-  mutate(
-    pid = recode(pid3, "Democrat" = 1, "Independent" = 2, "Republican" = 3, "Other" = 2, "Not sure" = 2),
-    conservative = ifelse(ideo5 == "Conservative" | ideo5 == "Very conservative", 1, 0),
-  ) 
+# devtools::load_all()
+trump_margins = plotMarginalEffects(me |> filter(vote_trump == 1))
+biden_margins = plotMarginalEffects(me |> filter(vote_trump == 0))
+```
 
-my_model = polr(as.factor(pid) ~ conservative, data = dat)
+```{r}
+biden_no_legend <- biden + theme(legend.position = "none")
+trump_no_legend <- trump + theme(legend.position = "none")
 
-design_matrix <- expand.grid(
-   conservative = 1
- )
-#'
+biden_no_legend + biden_margins+
+trump_no_legend + trump_margins + 
+  plot_layout(widths = c(0.3, 0.4),
+              heights = c(1, 1))
+```
 
-library(tidyverse)
-library(MASS)
-library(ggridges)
 
-load("~/Dropbox/github_repos/teaching/POL683_Fall24/advancedRegression/vignettes/dataActive.rda")
+```{r}
+library(ggplot2)
 
-dat <- dataActive |>
-  mutate(
-    pid = recode(pid3, "Democrat" = 1, "Independent" = 2, "Republican" = 3, 
-                 "Other" = 2, "Not sure" = 2),
-    conservative = ifelse(ideo5 == "Conservative" | ideo5 == "Very conservative", 1, 0),
+
+# 2. Plotting the marginal effects
+p <- ggplot(me |> filter(vote_trump == 0), aes(y = category, x = mean_effect)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey", size = 0.5) +
+  geom_errorbarh(aes(xmin = lower_ci, xmax = upper_ci), 
+                 height = 0.05, 
+                 color = "darkgrey") +
+  geom_point(size = 5, color = "black", alpha = 0.5) + 
+  labs(
+    x = "Estimated Effect and Confidence Interval",
+    y = "Category",
+    title = "Marginal Effects (Biden Voters)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(), 
+    panel.grid.minor.y = element_blank(),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  scale_x_continuous(limits = c(-0.2, 0.2), breaks = seq(-0.2, 0.2, by = 0.1)) +
+  scale_y_discrete(
+    labels = c(
+      "1" = "Strongly Not Support", 
+      "2" = "Do Not Support", 
+      "3" = "Neutral", 
+      "4" = "Support", 
+      "5" = "Strongly Support"
+    )
   )
 
-my_model <- polr(as.factor(ideo5) ~ pid3, data = dat)
+# Print the plot
+print(p)
+```
 
-# Create design matrix
-design_matrix <- expand.grid(
-  pid3 = unique(dat$pid3)
-)
+```{r}
+library(vayr)
+library(dplyr)
 
-# Generate predictions
-predictions <- predict_ordinal_probs(
-  design_matrix = design_matrix,
-  model = my_model,
-  n_draws = 1000
-)
+observed_counts <- sample_df %>%
+  group_by(prepost, vote_trump, attend_march) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  rename(category = attend_march) %>%
+  mutate(category = factor(category)) |>
+  filter(!is.na(vote_trump))
 
-# View structure
-head(predictions)
-summarize_predictions(predictions, group_vars = c("pid3", "category"))
-# Plot for conservatives
+# Get predictions for joining
+pred_summary <- summarize_predictions(predictions) %>%
+  mutate(category = factor(category))
 
+plot_data <- sample_df %>%
+  filter(!is.na(vote_trump)) %>%
+  mutate(category = factor(attend_march)) %>%
+  left_join(pred_summary %>% dplyr::select(prepost, vote_trump, category, mean_prob), 
+            by = c("prepost" = "prepost", "vote_trump" = "vote_trump", "category" = "category")) %>%
+  mutate(
+    prepost_label = factor(prepost, 
+                          levels = c(0, 1), 
+                          labels = c("Pre-Election", "Post-Election")),
+    vote_trump_label = factor(vote_trump,
+                             levels = c(0, 1),
+                             labels = c("Biden Voters", "Trump Voters"))
+  )
+
+# Create the plot
+pred_summary %>%
+  left_join(observed_counts, by = c("prepost", "vote_trump", "category")) %>%
+  mutate(
+    prepost_label = factor(prepost, 
+                          levels = c(0, 1), 
+                          labels = c("Pre-Election", "Post-Election")),
+    vote_trump_label = factor(vote_trump,
+                             levels = c(0, 1),
+                             labels = c("Biden Voters", "Trump Voters"))
+  ) %>%
+  ggplot(aes(x = prepost_label, y = mean_prob, color = category, group = category)) +
+  # Sunflowers centered at predicted probabilities
+  geom_point(data = plot_data, 
+             aes(x = prepost_label, y = mean_prob, color = category),
+             position = position_sunflowerdodge(width = 0.5, density = 50, aspect_ratio = 5),
+             size = 0.2, alpha = 0.25, inherit.aes = FALSE) +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci),
+                position = position_dodge(width = 0.5),
+                width = 0.1, linewidth = 0.8, alpha = 0.7) +
+  geom_line(position = position_dodge(width = 0.5), linewidth = 1) + 
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci, fill = category),
+              position = position_dodge(width = 0.5),
+              alpha = 0.2, color = NA)  + 
+  facet_wrap(~vote_trump_label, ncol = 1) +
+  labs(
+    x = "",
+    y = "Predicted Probability",
+    color = "Response\nCategory",
+    title = "Predicted Probabilities by Election Period and Vote Choice",
+    subtitle = " Lines show change in predicted probabilities;\nSunflower plot corresponds to the relative proportion of respondents in that category;\nerror bars are 95% confidence intervals"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid.major.x = element_blank(),
+    strip.text = element_text(size = 12, face = "bold")
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1)) +
+  scale_color_manual(values = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey", "4" = "darkslategrey", "5" = "black"),
+ labels = c("1" = "Strongly Not Support", "2" = "Do Not Support", "3" = "Neutral", "4" = "Support", "5" = "Strongly Support")) -> points
+
+points
 
 ```
 
 ```{r}
-library(tidyverse)
-library(ggridges)
-# Generate prediction data
-newdat =  expand.grid(conservative = 1,
-                                 independent = 0,
-                                 authoritarianism = c(0,1)) %>%
-            mutate(
-              int1 = conservative*authoritarianism,
-              int2 = independent*authoritarianism
-  ) ##j x 6
+library(vayr)
+library(dplyr)
 
-parameters = mvrnorm(1000, c(coefficients(my_model),  my_model$zeta), vcov(my_model)) %>% as.data.frame()
-# Keep parameters if in newdat
-data.frame(
-  authoritarianism = 1,
-  categoryDem = plogis(parameters$`1|2` - as.matrix(parameters[,names(parameters) %in% names(newdat)]) %*% t(as.matrix(newdat))[,1]) ,
-  categoryInd = plogis(parameters$`2|3` - as.matrix(parameters[,names(parameters) %in% names(newdat)]) %*% t(as.matrix(newdat))[,1]),
-  categoryRep = 1 - plogis(parameters$`2|3` - as.matrix(parameters[,names(parameters) %in% names(newdat)]) %*% t(as.matrix(newdat))[,1]) 
+observed_counts <- sample_df %>%
+  group_by(prepost, vote_trump, attend_march) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  rename(category = attend_march) %>%
+  mutate(category = factor(category)) |>
+  filter(!is.na(vote_trump))
+
+pred_summary <- summarize_predictions(predictions) %>%
+  mutate(category = factor(category))
+
+expected_values_ci <- predictions %>%
+  mutate(category_num = as.numeric(as.character(category))) %>%
+  group_by(draw, prepost, vote_trump) %>%
+  summarise(expected_value = sum(category_num * probability), .groups = "drop") %>%
+  group_by(prepost, vote_trump) %>%
+  summarise(
+    mean_expected = mean(expected_value),
+    lower_ci = quantile(expected_value, 0.025),
+    upper_ci = quantile(expected_value, 0.975),
+    .groups = "drop"
   ) %>%
-  pivot_longer(cols = starts_with("category"), names_to = "category", values_to = "value") %>%
-ggplot(aes(x = value, y = category, fill = category)) +
-  geom_density_ridges(alpha = 0.7, color = "white") +
-  theme_ridges() +
-  labs(title = "Partisanship among Authoritarians", x = "Probability", y = "PID") + 
-  scale_fill_manual(values = c("blue", "purple", "red")) 
+  mutate(
+    prepost_label = factor(prepost, 
+                          levels = c(0, 1), 
+                          labels = c("Pre-Election", "Post-Election")),
+    vote_trump_label = factor(vote_trump,
+                             levels = c(0, 1),
+                             labels = c("Biden Voters", "Trump Voters"))
+  )
 
+# View expected values with CI
+print(expected_values_ci)
+
+# Prepare raw data aligned with predicted probabilities
+plot_data <- sample_df %>%
+  filter(!is.na(vote_trump)) %>%
+  mutate(category = factor(attend_march)) %>%
+  left_join(pred_summary %>% dplyr::select(prepost, vote_trump, category, mean_prob), 
+            by = c("prepost" = "prepost", "vote_trump" = "vote_trump", "category" = "category")) %>%
+  mutate(
+    prepost_label = factor(prepost, 
+                          levels = c(0, 1), 
+                          labels = c("Pre-Election", "Post-Election")),
+    vote_trump_label = factor(vote_trump,
+                             levels = c(0, 1),
+                             labels = c("Biden Voters", "Trump Voters"))
+  )
+
+
+# Expected value plot WITH confidence intervals
+# Expected value plot with 1-5 scale and labeled points
+ ggplot(expected_values_ci, aes(x = prepost_label, y = mean_expected, 
+                               color = vote_trump_label, group = vote_trump_label)) +
+  # Add midpoint reference line at 3
+  geom_hline(yintercept = 3, linetype = "dashed", color = "gray50", linewidth = 0.5) +
+  # geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = vote_trump_label),
+  #             alpha = 0.2, color = NA) +
+  geom_line(linewidth = 0.5) +
+  geom_point(size = 4, alpha = 0.3) +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci),
+                width = 0.005, linewidth = 1) +
+  labs(
+    x = "",
+    y = "Expected Support Level",
+    color = "Vote Choice",
+    fill = "Vote Choice",
+    title = "Attend a March or Rally",
+    subtitle = "Expected value = sum(category x probability) with 95% confidence intervals"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid.major.x = element_blank()
+  ) +
+  scale_y_continuous(
+    limits = c(2, 4),
+    breaks = 2:4,
+    labels = c("2" = "Oppose", 
+               "3" = "Neutral", 
+               "4" = "Support")
+  ) +
+  scale_color_manual(values = c("Biden Voters" = "#457B9D", "Trump Voters" = "#E63946")) +
+  scale_fill_manual(values = c("Biden Voters"  = "#457B9D", "Trump Voters" = "#E63946"))  
+```
+
+## Marginal effects. 
+
+Say are interest is in whether these changes are statistically significant at the conventional 0.05 level. We can use the `predict_logit_probs()` function to generate predicted probabilities from a binary logit model, and then summarize those predictions.
+
+
+This gives us the marginal effect of supporting attending a march, for Trump voters versus Biden voters, from pre- to post-election. The marginal effect is just the change from pre to post for each group.
+
+```{r}
+library(patchwork)
+  points + p + 
+  plot_layout(widths = c(0.3, 0.4),
+              heights = c(1, 0.5))
 ```
