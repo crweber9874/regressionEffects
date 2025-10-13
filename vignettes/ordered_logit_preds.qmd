@@ -282,6 +282,50 @@ The sunflower plot follows the structure:
 
 * Each sunflower point is scaled by the number of observations in that cell.
 
+The Pre/Post comparisons can be presented like this, 
+
+```{r}
+plotDots(plot_burn$plotting_data |>
+          filter(vote_trump == 1), 
+          y_var = "mean_prob",
+          color_var = "prepost",
+          color_levels = c(0, 1),
+          color_labels = c("Pre", "Post"),
+          color_values = c("grey", "black"),
+          title = "Flag Burning",
+)
+```
+Or like this, 
+
+
+```{r}
+library(dplyr)
+plotSunflowerDots(
+  list(
+    plotting_data = plot_burn$plotting_data |> filter(vote_trump == 1),
+    observed_counts = plot_burn$observed_counts |> filter(vote_trump == 1)
+  ),
+  join_vars = c("category", "prepost"),
+  color_levels = c(1, 0),
+  color_labels = c("Post", "Pre"),
+  color_values = c("grey", "black"),
+  title = "Flag Burning\nTrump Voters",
+  x_label = "",
+  y_label = "Predicted Probability",
+  mean_point_size = 2,
+  mean_point_alpha = 0.1,
+  sunflower_size = 0.15,
+  sunflower_alpha = 0.3,
+  y_limits = c(0, 0.6),
+  dodge_width = 0.65,
+  sunflower_density = 50,
+  sunflower_aspect_ratio = 10,
+)
+```
+
+Or like this,
+
+
 ```{r}
 devtools::load_all()
 library(ggplot2)
@@ -302,57 +346,25 @@ plotSunflower(
 )
 ```
 
+The information is identical, just conveyed in slighty different ways.
 
-```{r}
-devtools::load_all()
-library(ggplot2)
-# Plot Trump voters
-plot_dat_labeled <- plot_burn$plotting_data %>%
-    mutate(
-    prepost_label = factor(prepost, levels = c(0, 1), 
-                           labels = c("Pre-Election", "Post-Election"))
-    ) |> 
-  filter(vote_trump == 1) 
-
-plotConnectedSunflower(
-    pred_summary = plot_dat_labeled,
-    observed_counts = plot_burn$observed_counts |> filter(!is.na(vote_trump)) |> filter(vote_trump == 1),
-    x_var = "prepost_label",
-    join_vars = c("prepost", "vote_trump", "category"),
-    title = "Trump Voters"
-)
-```
-
-
-
-```{r}
-library(tidyverse)
-plotSunflower(
-  plot_burn$plotting_data, 
-  plot_burn$observed_counts,
-  mean_point_size = 4,
-  connector_linewidth = 1,
-  connector_alpha = 0.7,
-  sunflower_size = 0.1,
-  subtitle = "Biden Voters"
-)
-```
 
 ```{r}
 library(ggplot2)
+
 create_combined_plot(
-    plot_data = plot_march,
-    predictions = predictions_march,
-    main_title = "Election Recounts",
-    moderator = "vote_trump",
-    moderator_levels = c(0, 1),
-    group_labels = c("Biden Voters", "Trump Voters"),
-    x_var = "prepost",
-    x_var_label = "prepost_label",
-    x_labels = c("Pre-Election", "Post-Election"),
-    join_vars = c("prepost", "vote_trump", "category"),
-    save_path = "recounts.png"
+  plot_data = plot_burn,
+  predictions = predictions_burn,
+  main_title = "Flag Burning",
+  subtitle = "Comparing Biden and Trump Voters Before and After the 2020 Election",
+  caption = "Source: Western States Survey 2020. Error bars show 95% credible intervals. N = 2,000 respondents.",
+  moderator = "vote_trump",
+  moderator_levels = c(0, 1),
+  group_labels = c("Biden Voters", "Trump Voters"),
+  join_vars = c("category", "prepost", "vote_trump")
 )
+ggsave("ordered_logit_sunflower.png", width = 8, height = 8)
+
 # create_combined_plot(
 #   plot_data = plot_burn, # must be list,
 #   predictions = predictions_burn,

@@ -1,157 +1,316 @@
-#' @title ggPoint_categorical
+#' Plot Predicted Effects as Simple Dots
 #'
-#' @description Generate Point Estimates Plot for Categorical/Ordinal Dependent Variables
-#' This function creates a `ggplot2` visualization of point estimates and credible intervals,
-#' typically representing "winner/loser" effects, combined with a rug plot showing
-#' the raw distribution of the dependent variable in each faceted column. It is designed for
-#' ordinal or nominbal dependent variables.
+#' Creates a minimal visualization showing predicted effects or probabilities
+#' as dots, with optional grouping by condition.
 #'
-#' @param plot_dat Dataframe containing posterior predictions with `mean`, `lower`, `upper`
-#' bounds for estimates, and columns for `.category`, `prepost`, and the faceting variable.
-#' @param raw_data_for_rug Dataframe containing the original, raw data. This is used
-#' to calculate the distribution for the rug plot. It must contain the columns specified
-#' by `dv_col_name` and `facet_col_name`. The plot shows the marginal distributionals across
-#' pre-post treatment.
-#' @param dv_col_name Character string. The name of the column in `raw_data_for_rug` that
-#' represents the raw dependent variable (e.g., `"burn_flag"`). This variable should
-#' contain numeric or factor levels (e.g., "1" to "5") that map to `.category`.
-#' @param facet_col_name Character string. The name of the column in both `plot_dat` and
-#' `raw_data_for_rug` used for faceting (e.g., `"presvote_trump_2020"`).
-#' @param color_col_name Character string. The name of the column in `plot_dat` used for
-#' coloring points and lines (e.g., `"prepost"`).
-#' @param category_levels Character vector. The underlying levels of the `.category` variable
-#' (e.g., `c("1", "2", "3", "4", "5")`). Used for factor reordering.
-#' @param category_labels Character vector. The labels corresponding to `category_levels`
-#' (e.g., `c("Strongly Disagree", ..., "Strongly Agree")`).
-#' @param facet_levels Character vector. The underlying levels of the `facet_col_name`
-#' (e.g., `c("0", "1")`). Used for factor reordering.
-#' @param facet_labels Character vector. The labels corresponding to `facet_levels`
-#' (e.g., `c("Trump Voter", "Biden Voter")`).
-#' @param color_levels Character vector. The underlying levels of the `color_col_name`
-#' (e.g., `c("pre", "post")`). Used for factor reordering.
-#' @param color_labels Character vector. The labels corresponding to `color_levels`
-#' (e.g., `c("Pre-Survey", "Post-Survey")`).
-#' @param color_values Character vector. The hexadecimal color codes for the levels of
-#' `color_col_name` (e.g., `c("grey", "black")`).
-#' @param point_size Numeric. Size of the `geom_point` markers. Defaults to `3`.
-#' @param dodge_width Numeric. Horizontal dodging width for `geom_point` and `geom_linerange`
-#' to separate overlaid groups. Defaults to `0.6`.
-#' @param linerange_width Numeric. Line width for `geom_linerange`. Defaults to `1.25`.
-#' @param title Character string. Main title of the plot. Defaults to `"Point estimates"`.
-#' @param y_axis_title Character string. Label for the Y-axis (which becomes the X-axis
-#' after `coord_flip()`). Defaults to `"Posterior Mean Estimate"`.
-#' @param x_axis_title Character string. Label for the X-axis (which becomes the Y-axis
-#' after `coord_flip()`). Defaults to `""` (empty string).
-#' @param rug_jitter_height Numeric. Amount of vertical jitter for the rug plot points.
-#' Defaults to `0.1`.
-#' @param rug_side Character string. Side for the rug plot (`"b"`, `"t"`, `"l"`, `"r"`).
-#' Defaults to `"b"` (bottom, which is left after `coord_flip()`).
-#' @param rug_alpha Numeric. Transparency (alpha) of the rug plot marks. Defaults to `0.1`.
-#' @param rug_size Numeric. Size (thickness) of the rug plot marks. Defaults to `0.3`.
-#' @param rug_length Unit object. Length of the rug plot marks. Defaults to `unit(0.05, "npc")`.
-#' @param rug_color Character string. Color of the rug plot marks. Defaults to `"lightgrey"`.
-#' @param ... Additional arguments passed to `ggplot2::facet_wrap()`.
-#' @return A `ggplot` object.
+#' @param plot_dat A data frame with prediction summaries containing:
+#'   - mean, lower, upper: point estimates and intervals
+#'   - .category: for ordinal/categorical outcomes
+#'   - grouping variables (e.g., prepost, presvote_trump_2020)
+#' @param y_var Character. Name of the y-axis variable (point estimate).
+#'   Default: "mean"
+#' @param x_var Character. Name of the x-axis variable. Default: ".category"
+#' @param color_var Character. Name of variable for coloring dots. Set to NULL for no color grouping.
+#'   Default: "prepost"
+#' @param facet_var Character. Optional name of variable for faceting.
+#'   Default: NULL
+#' @param category_levels Character vector. Underlying levels of category variable.
+#'   Default: c("1", "2", "3", "4", "5")
+#' @param category_labels Character vector. Labels for categories.
+#'   Default: c("Strongly Disagree", "Disagree", "Neither Agree nor Disagree",
+#'              "Agree", "Strongly Agree")
+#' @param color_levels Character vector. Underlying levels of color variable.
+#'   Default: c("pre", "post")
+#' @param color_labels Character vector. Labels for color variable.
+#'   Default: c("Pre-Survey", "Post-Survey")
+#' @param color_values Character vector. Colors for each level.
+#'   Default: c("grey", "black")
+#' @param facet_levels Character vector. Underlying levels of facet variable.
+#'   Default: c("0", "1")
+#' @param facet_labels Character vector. Labels for facet variable.
+#'   Default: c("Group 0", "Group 1")
+#' @param title Main title for the plot. Default: "Predicted Effects"
+#' @param x_label Label for the x-axis. Default: ""
+#' @param y_label Label for the y-axis. Default: "Posterior Mean Estimate"
+#' @param point_size Size of the dots. Default: 3
+#' @param point_alpha Transparency of the dots. Default: 0.8
+#' @param y_limits Numeric vector of length 2 specifying y-axis limits.
+#'   Default: NULL
+#' @param dodge_width Width for position dodging. Default: 0.6
+#' @param coord_flip Logical. Whether to flip coordinates. Default: TRUE
+#' @param connector_lines Logical. Whether to draw lines from axis to points. Default: TRUE
+#' @param connector_linewidth Width of connector lines. Default: 1
+#' @param connector_alpha Transparency of connector lines. Default: 0.6
+#' @param show_errorbar Logical. Whether to show error bars for confidence intervals. Default: FALSE
+#' @param errorbar_width Width of error bars. Default: 0.2
+#' @param errorbar_linewidth Line width of error bars. Default: 0.8
+#' @param ci_lower Name of column with lower CI bound. Default: NULL (auto-detects "lower_ci" or "lower")
+#' @param ci_upper Name of column with upper CI bound. Default: NULL (auto-detects "upper_ci" or "upper")
+#' @param reference_line Numeric. Optional y-value for reference line (e.g., 0 for marginal effects). Default: NULL
+#'
+#' @return A ggplot2 object
+#'
+#' @examples
+#' \dontrun{
+#' # Basic usage with default settings (includes connector lines)
+#' plotDots(plot_dat)
+#'
+#' # Filter to Trump voters only, show pre/post comparison
+#' plotDots(plot_burn$plotting_data |> filter(vote_trump == 1),
+#'          y_var = "mean_prob",
+#'          color_var = "prepost",
+#'          color_levels = c(0, 1),
+#'          color_labels = c("Pre", "Post"),
+#'          color_values = c("grey", "black"))
+#'
+#' # Marginal effects with error bars (auto-detects "lower" and "upper" columns)
+#' plotDots(me_data,
+#'          y_var = "mean",
+#'          x_var = ".category",
+#'          color_var = NULL,
+#'          show_errorbar = TRUE,
+#'          reference_line = 0,
+#'          y_limits = c(-0.3, 0.3),
+#'          y_label = "Marginal Effect")
+#'
+#' # Marginal effects with custom CI columns
+#' plotDots(me_data,
+#'          y_var = "mean_effect",
+#'          x_var = "category",
+#'          color_var = NULL,
+#'          show_errorbar = TRUE,
+#'          ci_lower = "lower_ci",
+#'          ci_upper = "upper_ci",
+#'          reference_line = 0,
+#'          y_limits = c(-0.3, 0.3))
+#'
+#' # With faceting by Trump vote
+#' plotDots(plot_dat,
+#'          facet_var = "presvote_trump_2020",
+#'          facet_levels = c("0", "1"),
+#'          facet_labels = c("Biden Voters", "Trump Voters"))
+#'
+#' # Without connector lines
+#' plotDots(plot_dat, connector_lines = FALSE)
+#'
+#' # Custom line styling
+#' plotDots(plot_dat,
+#'          connector_linewidth = 1.5,
+#'          connector_alpha = 0.8)
+#' }
+#'
 #' @export
-ggPoint_categories <- function(plot_dat,
-                                raw_data_for_rug,
-                                dv_col_name = "burn_flag",
-                                facet_col_name = "presvote_trump_2020",
-                                color_col_name = "prepost",
-                                category_levels = c("1", "2", "3", "4", "5"),
-                                category_labels = c("Strongly Disagree", "Disagree",
-                                                    "Neither Agree nor Disagree",
-                                                    "Agree", "Strongly Agree"),
-                                facet_levels = c("0", "1"),
-                                facet_labels = c("Trump Voter", "Biden Voter"),
-                                color_levels = c("pre", "post"), # color levels
-                                color_values = c("grey", "black"),
-                                color_labels = c("Pre-Survey", "Post-Survey"),
-                                point_size = 3,
-                                dodge_width = 0.6,
-                                linerange_width = 1.25,
-                                title = "Point estimates",
-                                y_axis_title = "Posterior Mean Estimate",
-                                x_axis_title = "",
-                                rug_jitter_height = 0.1,
-                                rug_side = "b",
-                                rug_alpha = 0.1,
-                                rug_size = 0.3,
-                                rug_length = grid::unit(0.05, "npc"), # units::unit
-                                rug_color = "lightgrey",
-                                y_axis_limits = c(0,1),
-                                ...) {
+plotDots <- function(plot_dat,
+                     y_var = "mean",
+                     x_var = ".category",
+                     color_var = "prepost",
+                     facet_var = NULL,
+                     category_levels = c("1", "2", "3", "4", "5"),
+                     category_labels = c("Strongly Disagree", "Disagree",
+                                         "Neither Agree nor Disagree",
+                                         "Agree", "Strongly Agree"),
+                     color_levels = c("pre", "post"),
+                     color_labels = c("Pre-Survey", "Post-Survey"),
+                     color_values = c("grey", "black"),
+                     facet_levels = c("0", "1"),
+                     facet_labels = c("Group 0", "Group 1"),
+                     title = "Predicted Effects",
+                     x_label = "",
+                     y_label = "Posterior Mean Estimate",
+                     point_size = 3,
+                     point_alpha = 0.8,
+                     y_limits = NULL,
+                     dodge_width = 0.6,
+                     coord_flip = TRUE,
+                     connector_lines = TRUE,
+                     connector_linewidth = 1,
+                     connector_alpha = 0.6,
+                     show_errorbar = FALSE,
+                     errorbar_width = 0.2,
+                     errorbar_linewidth = 0.8,
+                     ci_lower = NULL,
+                     ci_upper = NULL,
+                     reference_line = NULL) {
 
-  # --- Input Validation (optional but good practice) ---
-  if (!all(c("mean", "lower", "upper", ".category", "prepost") %in% names(plot_dat))) {
-    stop("`plot_dat` must contain 'mean', 'lower', 'upper', '.category', and 'prepost' columns.")
+  require(ggplot2)
+  require(dplyr)
+  require(rlang)
+
+  # Auto-detect CI column names if show_errorbar is TRUE
+  if (show_errorbar) {
+    if (is.null(ci_lower)) {
+      if ("lower_ci" %in% names(plot_dat)) {
+        ci_lower <- "lower_ci"
+      } else if ("lower" %in% names(plot_dat)) {
+        ci_lower <- "lower"
+      } else {
+        warning("show_errorbar is TRUE but could not auto-detect lower CI column.")
+        show_errorbar <- FALSE
+      }
+    }
+
+    if (is.null(ci_upper)) {
+      if ("upper_ci" %in% names(plot_dat)) {
+        ci_upper <- "upper_ci"
+      } else if ("upper" %in% names(plot_dat)) {
+        ci_upper <- "upper"
+      } else {
+        warning("show_errorbar is TRUE but could not auto-detect upper CI column.")
+        show_errorbar <- FALSE
+      }
+    }
   }
-  if (!all(c(dv_col_name, facet_col_name) %in% names(raw_data_for_rug))) {
-    stop(paste0("`raw_data_for_rug` must contain '", dv_col_name, "' and '", facet_col_name, "' columns."))
+
+  # Input validation
+  if (!y_var %in% names(plot_dat)) {
+    stop("y_var '", y_var, "' not found in plot_dat")
   }
 
-  # --- Data Preparation for Main Plot ---
+  if (!x_var %in% names(plot_dat)) {
+    stop("x_var '", x_var, "' not found in plot_dat")
+  }
 
+  if (!is.null(color_var) && !color_var %in% names(plot_dat)) {
+    stop("color_var '", color_var, "' not found in plot_dat")
+  }
+
+  if (!is.null(facet_var) && !facet_var %in% names(plot_dat)) {
+    stop("facet_var '", facet_var, "' not found in plot_dat")
+  }
+
+  # Prepare data with factor levels
   plot_dat_prepared <- plot_dat %>%
-    dplyr::mutate( # dplyr::mutate
-      .category = factor(.category, levels = category_levels, labels = category_labels),
-      # Use dynamic column name for prepost
-      !!rlang::sym(color_col_name) := factor(.data[[color_col_name]], levels = color_levels, labels = color_labels), # rlang::sym
-      # Use dynamic column name for facet_col_name
-      !!rlang::sym(facet_col_name) := factor(.data[[facet_col_name]], levels = facet_levels, labels = facet_labels) # rlang::sym
+    mutate(
+      !!sym(x_var) := factor(.data[[x_var]],
+                             levels = category_levels,
+                             labels = category_labels)
     )
 
-  # --- Data Preparation for Rug Plot (side_plot) ---
+  # Add color variable if provided
+  if (!is.null(color_var)) {
+    plot_dat_prepared <- plot_dat_prepared %>%
+      mutate(!!sym(color_var) := factor(.data[[color_var]],
+                                        levels = color_levels,
+                                        labels = color_labels))
+  }
 
-  side_plot_prepared <- raw_data_for_rug %>%
-    dplyr::select(!!rlang::sym(dv_col_name), !!rlang::sym(facet_col_name)) %>% # dplyr::select, rlang::sym
-    dplyr::mutate( # dplyr::mutate
-      .category = jitter(as.numeric(.data[[dv_col_name]]), amount = rug_jitter_height * 5), # Jitter more broadly for actual categories
-      !!rlang::sym(facet_col_name) := factor(.data[[facet_col_name]], levels = facet_levels, labels = facet_labels) # rlang::sym
-    ) %>%
-    tidyr::drop_na(.category, !!rlang::sym(facet_col_name)) # tidyr::drop_na, rlang::sym
+  # Add facet variable preparation if needed
+  if (!is.null(facet_var)) {
+    plot_dat_prepared <- plot_dat_prepared %>%
+      mutate(!!sym(facet_var) := factor(.data[[facet_var]],
+                                        levels = facet_levels,
+                                        labels = facet_labels))
+  }
 
+  # Create base plot with optional reference line
+  if (is.null(color_var)) {
+    plot <- ggplot(plot_dat_prepared,
+                   aes(x = .data[[x_var]],
+                       y = .data[[y_var]]))
+  } else {
+    plot <- ggplot(plot_dat_prepared,
+                   aes(x = .data[[x_var]],
+                       y = .data[[y_var]],
+                       color = .data[[color_var]]))
+  }
 
-  plot <- ggplot2::ggplot(plot_dat_prepared,
-                       ggplot2::aes(x = .category, y = mean, ymin = lower, ymax = upper, colour = .data[[color_col_name]])) + # ggplot2::aes
-    ggplot2::facet_wrap(~.data[[facet_col_name]], nrow = 2, ...) + # ggplot2::facet_wrap
+  # Add reference line if specified
+  if (!is.null(reference_line)) {
+    plot <- plot +
+      geom_hline(yintercept = reference_line,
+                 linetype = "dashed",
+                 color = "darkgrey",
+                 linewidth = 0.5)
+  }
 
-    ggplot2::geom_point(size = point_size, position = ggplot2::position_dodge(width = dodge_width)) + # ggplot2::geom_point, ggplot2::position_dodge
-    ggplot2::geom_linerange(ggplot2::aes(x=.category, ymax=mean, ymin=0), linewidth = linerange_width, position = ggplot2::position_dodge(width = dodge_width)) + # ggplot2::geom_linerange, ggplot2::aes
+  # Add connector lines if requested
+  if (connector_lines) {
+    if (is.null(color_var)) {
+      plot <- plot +
+        geom_linerange(aes(ymin = 0, ymax = .data[[y_var]]),
+                       linewidth = connector_linewidth,
+                       alpha = connector_alpha)
+    } else {
+      plot <- plot +
+        geom_linerange(aes(ymin = 0, ymax = .data[[y_var]]),
+                       position = position_dodge(width = dodge_width),
+                       linewidth = connector_linewidth,
+                       alpha = connector_alpha)
+    }
+  }
 
-    ggplot2::geom_rug(data = side_plot_prepared,
-                      ggplot2::aes(x = .category, y = 0,
-                                   colour = NULL,
-                                   ymin = NULL, ymax = NULL, group = NULL),
-                      inherit.aes = FALSE,
-                      position = ggplot2::position_jitter(width = rug_jitter_height, seed = 123),
-                      sides = rug_side,
-                      linewidth = rug_size,
-                      alpha = rug_alpha,
-                      color = rug_color,
-                      length = rug_length) +
+  # Add error bars if requested
+  if (show_errorbar && !is.null(ci_lower) && !is.null(ci_upper)) {
+    if (ci_lower %in% names(plot_dat_prepared) && ci_upper %in% names(plot_dat_prepared)) {
+      if (is.null(color_var)) {
+        plot <- plot +
+          geom_errorbar(aes(ymin = .data[[ci_lower]], ymax = .data[[ci_upper]]),
+                        width = errorbar_width,
+                        linewidth = errorbar_linewidth)
+      } else {
+        plot <- plot +
+          geom_errorbar(aes(ymin = .data[[ci_lower]], ymax = .data[[ci_upper]]),
+                        width = errorbar_width,
+                        linewidth = errorbar_linewidth,
+                        position = position_dodge(width = dodge_width))
+      }
+    }
+  }
 
-    ggplot2::coord_flip() +
+  # Add points
+  if (is.null(color_var)) {
+    plot <- plot +
+      geom_point(size = point_size,
+                 alpha = point_alpha)
+  } else {
+    plot <- plot +
+      geom_point(size = point_size,
+                 alpha = point_alpha,
+                 position = position_dodge(width = dodge_width))
+  }
 
-    ggplot2::ggtitle(title) +
-    ggplot2::scale_y_continuous(y_axis_title, limits = y_axis_limits) +
-    ggplot2::scale_x_discrete(x_axis_title) +
+  # Add faceting if requested
+  if (!is.null(facet_var)) {
+    plot <- plot + facet_wrap(~.data[[facet_var]], nrow = 2)
+  }
 
-    ggplot2::scale_colour_manual(
-      name = "",
-      values = color_values,
-      labels = color_labels
-    ) +
+  # Add labels and theme
+  plot <- plot +
+    ggtitle(title) +
+    scale_x_discrete(x_label) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      panel.grid.major.x = element_blank(),
+      axis.ticks = element_blank(),
+      panel.background = element_blank(),
+      text = element_text(size = 10),
+      axis.text = element_text(size = 8),
+      axis.title = element_text(size = 10),
+      plot.title = element_text(size = 12, face = "bold")
+    )
 
-    ggplot2::theme(legend.position = "bottom",
-                   panel.grid = ggplot2::element_blank(),
-                   axis.ticks = ggplot2::element_blank(),
-                   panel.background = ggplot2::element_blank(),
-                   axis.text = ggplot2::element_text(size = 8),
-                   axis.text.x = ggplot2::element_text(angle = 0),
-                   plot.title = ggplot2::element_text(color = "black", size = 12))
+  # Add y-axis scale
+  if (!is.null(y_limits)) {
+    plot <- plot + scale_y_continuous(y_label, limits = y_limits)
+  } else {
+    plot <- plot + scale_y_continuous(y_label)
+  }
+
+  # Add color scale if color_var is provided
+  if (!is.null(color_var)) {
+    plot <- plot +
+      scale_colour_manual(
+        name = "",
+        values = color_values,
+        labels = color_labels
+      )
+  }
+
+  # Flip coordinates if requested
+  if (coord_flip) {
+    plot <- plot + coord_flip()
+  }
 
   return(plot)
 }
-
-
