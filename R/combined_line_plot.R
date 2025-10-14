@@ -181,7 +181,7 @@
 #' \code{\link{prepare_prediction_data}} for preparing input data
 #'
 #' @export
-create_combined_sunflower <- function(plot_data,
+create_combined_sunflower_plot <- function(plot_data,
                                       predictions = NULL,
                                       me_data = NULL,
                                       main_title,
