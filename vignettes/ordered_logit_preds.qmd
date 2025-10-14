@@ -153,13 +153,14 @@ Let's estimate an ordered logit model in `R`, from the `MASS` package. Data are 
 ### Estimation 
 
 ```{r, warning = FALSE, message = FALSE, echo = TRUE}
+devtools::install_github("crweber9874/regressionEffects")
+
 library(dplyr)
 library(tidyr)
 library(MASS)
-
+library(regressionEffects)
 download.file("https://raw.githubusercontent.com/crweber9874/advancedRegression/main/data/wss20.rda",
               destfile = "wss20.rda")
-## Load into session
 load("wss20.rda")
 
 wss20 = wss20 |>
