@@ -321,6 +321,49 @@ plotSunflowerDots(
   sunflower_density = 50,
   sunflower_aspect_ratio = 10,
 )
+
+# Test example for create_combined_sunflower
+
+create_combined_sunflower(
+  plot_data = plot_burn,
+  predictions = predictions_burn,
+  main_title = "Flag Burning",
+  subtitle = "Comparing Biden and Trump Voters Before and After the 2020 Election",
+  caption = "Source: Western States Survey 2020. Lines connect conditions. N = 2,000 respondents.",
+  moderator = "vote_trump",
+  moderator_levels = c(0, 1),
+  group_labels = c("Biden Voters", "Trump Voters"),
+  category_levels = c("1", "2", "3", "4", "5"),
+  category_labels = c("Strongly Oppose", "Oppose", "Neutral", "Support", "Strongly Support"),
+  x_var = "prepost_label",
+  join_vars = c("prepost", "category", "vote_trump"),
+  focal_var = "prepost",
+  focal_contrast = c(0, 1),
+  colors = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey", 
+            "4" = "darkslategrey", "5" = "black"),
+  sunflower_params = list(
+    sunflower_size = 0.15,
+    sunflower_alpha = 0.3,
+    errorbar_width = 0.1,
+    errorbar_linewidth = 0.8,
+    line_linewidth = 1,
+    dodge_width = 0.65,
+    sunflower_density = 50,
+    sunflower_aspect_ratio = 10,
+    y_limits = c(0, 0.6),
+    y_breaks = seq(0, 0.6, 0.1)
+  ),
+  marginal_params = list(
+    point_size = 2,
+    point_alpha = 0.8,
+    show_errorbar = TRUE,
+    errorbar_width = 0.2,
+    reference_line = 0,
+    y_limits = c(-0.3, 0.3)
+  )
+)
+
+
 ```
 
 Or like this,

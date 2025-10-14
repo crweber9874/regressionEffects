@@ -1,6 +1,6 @@
 Package: regressionEffects
 Type: Package
-Title: Utilities for Regression Analysis 
+Title: General Utilities for Regression Analysis 
 Version: 0.1.0
 Authors@R: c(
     person("Weber", "Christopher Robert", email = "chrisweber@arizona.edu", role = c("aut", "cre"))
@@ -17,11 +17,12 @@ Imports:
     tidyverse,
     dplyr,
     ggplot2,
-    brms,
     shiny, 
     cowplot,
     plotly
 Suggests:
     lavaan,
-    cowplot
+    cowplot,
+    brms,
+    stan
 RoxygenNote: 7.3.2
