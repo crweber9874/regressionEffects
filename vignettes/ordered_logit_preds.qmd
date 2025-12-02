@@ -186,20 +186,48 @@ westernData <- wss20 |>
 Having prepared the data, estimate models. 
 
 ### The Model Estimation Block
+```{r}
+## Calls that go to functions
+
+recode_variable <- function(data, variable, recode_rules) {
+  data %>%
+    dplyr::mutate(
+      !!variable := dplyr::case_when(
+        !!dplyr::sym(variable) %in% names(recode_rules) ~ 
+          as.numeric(recode_rules[as.character(!!dplyr::sym(variable))]),
+        TRUE ~ NA_real_
+      )
+    )
+}
+
+```
 
 ```{r, warning = FALSE, message = FALSE, echo = TRUE}
 ### Estimate
+## Truncate the data to only the strong agree category 
+
+# Single variable
+
+# Chain multiple variables
+recode_data <- westernData %>%
+  recode_variable("criticize_election", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("burn_flag", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("court", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("recount", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("attend_march", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) 
+
+
 
 attend_march = polr(as.factor(party_identification3) ~ prepost*vote_trump , 
-               data = westernData)
+               data = recode_data)
 criticize_election = polr(as.factor(criticize_election) ~ prepost*vote_trump , 
-               data = westernData)
+               data = recode_data)
 burn_flag = polr(as.factor(burn_flag) ~ prepost*vote_trump , 
-               data = westernData)
+               data = recode_data)
 court  = polr(as.factor(court) ~ prepost*vote_trump , 
-               data = westernData)
+               data = recode_data)
 recount = polr(as.factor(recount) ~ prepost*vote_trump , 
-               data = westernData)
+               data = recode_data)
 
 summary(attend_march)
 ```
@@ -227,29 +255,41 @@ design_matrix <- expand.grid(
 predictions_march <- predict_ordinal_probs(
   design_matrix = design_matrix,
   model = attend_march,
-  n_draws = 1000)
+  n_draws = 1000) |>
+  mutate(variable = "rally")
 predictions_criticize <- predict_ordinal_probs(
   design_matrix = design_matrix,
   model = criticize_election,
-  n_draws = 1000)
+  n_draws = 1000) |>
+  mutate(variable = "criticize")
 predictions_burn <- predict_ordinal_probs(
   design_matrix = design_matrix,
   model = burn_flag,
-  n_draws = 1000)
+  n_draws = 1000) |>
+  mutate(variable = "burn_flag")
 predictions_court <- predict_ordinal_probs(
   design_matrix = design_matrix,
   model = court,
-  n_draws = 1000)
+  n_draws = 1000) |>
+  mutate(variable = "court")
 predictions_recount <- predict_ordinal_probs(
   design_matrix = design_matrix,
   model = recount,
-  n_draws = 1000)
+  n_draws = 1000) |>
+  mutate(variable = "recount")
+
+rbind(predictions_march,
+      predictions_criticize,
+      predictions_burn,
+      predictions_court,
+      predictions_recount) -> predictions_all
+
 
 cat("The dimensions of this matrix:\n",
     dim(predictions_recount)[1], "rows and", 
     dim(predictions_recount)[2], "columns.")
 
-head(predictions_recount)
+head(predictions_all)
 ```
 
 Let's now create summaries.
@@ -266,11 +306,10 @@ This is useful but sort of messy, because we don't know how many observations ar
 This simplifies things by using `prepare_prediction_data`, which generates a list, the plot data and the observed counts.
 ```{r, cache = FALSE}
 
-plot_burn  <- prepare_prediction_data(westernData, predictions_burn)
-plot_court <- prepare_prediction_data(westernData, predictions_court)
-plot_criticize <- prepare_prediction_data(westernData, predictions_criticize)
-plot_march  <- prepare_prediction_data(westernData, predictions_march)
-plot_recount <- prepare_prediction_data(westernData, predictions_recount)
+plot_dat <- prepare_prediction_data(recode_data, predictions_burn,  # Use recode_data, not data
+                                    category_var = "burn_flag",
+                                    group_vars = c("prepost", "vote_trump"))
+
 ```
 
 ### Sunflower Plots
@@ -286,15 +325,18 @@ The sunflower plot follows the structure:
 The Pre/Post comparisons can be presented like this, 
 
 ```{r}
+
 plotDots(plot_burn$plotting_data |>
-          filter(vote_trump == 1), 
+          filter(vote_trump == 0), 
           y_var = "mean_prob",
           color_var = "prepost",
+          x_var = "category",
           color_levels = c(0, 1),
           color_labels = c("Pre", "Post"),
           color_values = c("grey", "black"),
           title = "Flag Burning",
-)
+          category_levels = c("1", "2", "3"),
+          category_labels = c("Disagree", "Neither","Agree"))
 ```
 Or like this, 
 
