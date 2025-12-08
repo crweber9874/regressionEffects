@@ -1,0 +1,2597 @@
+---
+title: "Causal Inference, Western Data"
+date: "`r Sys.Date()`"
+author: "Christopher Weber"
+organization: "University of Arizona"
+email: "chrisweber@arizona.edu"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  results = "hide",
+  fig.align = "center"
+)
+
+# Suppress Stan/C++ compiler output on Mac
+if (Sys.info()["sysname"] == "Darwin") {
+  options(buildtools.check = function(action) TRUE)
+  Sys.setenv(CPATH = "/opt/R/arm64/include")
+}
+
+# Set default ggplot theme
+library(ggplot2)
+theme_set(theme_minimal(base_size = 11))
+```
+
+
+## Introduction
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+library(brms)
+library(tidybayes)
+library(dplyr)
+library(tidyr)
+library(gt)
+library(dplyr)
+library(tidyr)
+library(MASS)
+library(brms)
+library(gt)
+library(ggplot2)
+library(ggridges)
+library(regressionEffects)
+
+
+download.file("https://raw.githubusercontent.com/crweber9874/advancedRegression/main/data/wss20.rda",
+              destfile = "wss20.rda")
+load("wss20.rda")
+
+wss20 = wss20 |>
+  pivot_wider(
+    names_from = contestation,
+    values_from = contestation_value
+  )
+
+westernData <- wss20 |>
+  mutate(contestation = rowMeans(cbind(attend_march, criticize_election, 
+                                       burn_flag, court, recount),
+                                 na.rm = TRUE), 
+        vote_trump = presvote_trump_2020,
+        authoritarianism = rowMeans(cbind(auth_1, auth_2, auth_3, auth_4), na.rm = TRUE),
+        republican = ifelse(party_identification3 == 3, 1, 0),
+        democrat = ifelse(party_identification3 == 1, 1, 0),
+        independent = ifelse(party_identification3 == 2, 1, 0),
+        libcon = (ideology5 - 1)/4,
+        prepost = ifelse(prepost == "post", 1, 0)
+)
+```
+
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+recode_variable <- function(data, variable, recode_rules) {
+  data %>%
+    dplyr::mutate(
+      !!variable := dplyr::case_when(
+        !!dplyr::sym(variable) %in% names(recode_rules) ~ 
+          as.numeric(recode_rules[as.character(!!dplyr::sym(variable))]),
+        TRUE ~ NA_real_
+      )
+    )
+}
+```
+
+
+```{r, echo=FALSE, warning = FALSE, message = FALSE}
+calculate_marginal_effects <- function(model, 
+                                       contrast_var, 
+                                       contrast_vals = c(0, 1), 
+                                       moderators = NULL) {
+  
+  # 1. Construct the grid, based on variable of marginal effect, DMatrix 
+  d_grid <- expand_grid(
+    {{ contrast_var }} := contrast_vals,
+    moderators
+  )
+  
+  # 2. Get Draws and calculate prosterior predictions,
+  draws_processed <- d_grid |>
+    add_epred_draws(model) |>
+    ungroup() |>
+    dplyr::select(.draw, .category, .epred, {{ contrast_var }}, names(moderators)) |>
+    
+    pivot_wider(
+      names_from = {{ contrast_var }},
+      values_from = .epred
+    ) |>
+    
+    mutate(
+      marginal_effect = .data[[as.character(contrast_vals[2])]] - 
+                        .data[[as.character(contrast_vals[1])]]
+    ) 
+  summary_stats <- draws_processed |>
+    group_by(across(all_of(names(moderators))), .category) |>
+    summarise(
+      mean = mean(marginal_effect),
+      sd = sd(marginal_effect),
+      lower = quantile(marginal_effect, 0.025),
+      upper = quantile(marginal_effect, 0.975),
+      .groups = "drop"
+    )
+  
+  return(summary_stats)
+}
+```
+
+Several often ignored problems emerge in causal inference using observational data: (1) selection bias into the treatment, (2) heterogeneity in treatment effects across units, and (3) sampling methods that affect whether a unit is actually observed; what is the mechanism that determines whether a unit is selected into the sample? Selection bias reflects the *fundamental problem of causal inference* in that we are unable to observe a unit in both *treatment* and *control* conditions. While this problem extends to randomized experiments, population averaged effects can be reliably estimated because -- unlike observational data -- knowledge of the treatment assignment assignment allows for the accurate estimation of average treatment effects. For observational data, population averaged effects may be confounded by unobserved variables that influence both treatment assignment and outcome, $y$.
+
+If there exists heterogeneity in treatment effects across units, a single estimated treatment effect may not accurately reflect differences across subpopulations. In our case, interest is in estimating the change from *pre-election* period to *post-election* on support for electoral contestation behaviors, $y$. The average treatment effect is the average difference in $y$ between the *post-election* and *pre-election* periods,
+
+$$
+\text{ATE} = \mathbb{E}[Y_i(1)] - \mathbb{E}[Y_i(0)]
+$$ {#eq-ate}
+
+However, if treatment effects vary across subpopulations -- say Trump voters versus Biden voters and/or something else -- the average treatment effect within each subgroup differs. Let $j$ index these groups (e.g., $j = 1$ for Trump, $j = 0$ for Biden)
+
+$$
+\text{ATE}_{j} = \mathbb{E}[Y_{ij}(1)] - \mathbb{E}[Y_{ij}(0)] 
+$$  {#eq-catej}
+
+If the treatment effect across different subgroups, the *conditional average treatment effect* (CATE), the *average treatment effect* (ATE) is simply the  average weighted by frequency effects for the subgroup.s\footnote{We estimate the Average Treatment Effect among Treated Units (ATT) of prepost assignment for Trump and Biden voters.} When the distance between @eq-cate and @eq-atej increases -- that is, heterogeneity; a considerable difference in treatment effects, a "winner-loser" effect -- @eq-ate does not accurately capture treatment effects.
+
+The third issue, population inference requires knowledge of how the sample units were collected. When units are sampled proportional to that of the broader population, one can adjust for sampling error. Sampling weights are used to readjust for imbalances brought about by random sampling or non-random sampling designs. 
+
+## Relevance to the Western States Data
+
+* (I) seems relevant to our data, particularly 2020 election data, because treatment assignment -- exposure to *pre-election* versus *post-election* period -- may be confounded by unobserved variables that also affect support for electoral contestation behavior. We have imbalanced exposure to *pre* and *post periods*, which may be correlated to unobserved factors. In this case, the assignment mechanism is not entirely random. It's not clear what contributed to being observed in the *pre* or *post* election period. We adjusted for this by *g-estimation* and *inverse probability weighting*. This is a bit more challenging for me to piece together with categorical data, so I estimated models using Bayesiam models to piece this together. 
+
+* (2) is also relevant, because treatment effects vary across subpopulations -- particularly vote choice -- which is a winner and loser effect. Even when controlling for this, there is still heterogeneity within Trump voters, indicating that not all Trump voters respond the same way to the loss.
+
+* (3) is also relevant, because our data are imbalanced (we have an oversample of latinos), and data are only observed in five western states.
+
+
+## Model Estimation
+
+I started with an ordered logit model in `R`, from the `brms` package. Data are analyzed comparing **pre** v. **post** election, to see if support for electoral contestation behavior (here, attending a march) change  -- for Trump voters versus Biden voters. This is specified to examine whether support for contestation varies depending upon electoral functions; a **winner-loser effect**.
+
+First, let's recode the data, then estimate the model in `brms`. The model without covariates.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+recode_data <- westernData %>%
+  recode_variable("criticize_election", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("burn_flag", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("court", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("recount", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("attend_march", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) 
+
+attend_march = brm(attend_march ~ prepost*vote_trump , 
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 1,
+               refresh = 0)
+print(attend_march)
+
+```
+
+The counterfactual for each respondent is not observable -- what *would* happen to those assigned to the post-election if they were instead assigned to the pre-election and vice-versa. So, what I do is first, estimate the model. Then, create two versions of the data; each dataset can be thought of as a population. In one version, the data is simply the observed data, in the second version, the pre-post variable is flipped for everyone. So, in the second dataset, everyone who was in the pre-election is put in the pre-election and those in the post-election are recoded as post-election. Then, I pass these datasets to the models -- which too are distributions, the posterior distributions of the parameters -- to generate predictions. From here, the different posterior predictive values constitute *what-if* scenarios -- e.g. everyone in the dataset is  and it's then fairly simple to calculate different treatment effects. Together these are the steps involved in the *g-computation* framework which we've been using. It involves fitting a model to the observed data -- the ordered or multinomial logit or linear regression -- and then simulating potential outcomes where every individual is in every treatment condition. 
+
+
+```{r, warning= FALSE, message = FALSE, echo = TRUE}
+observed_data <- recode_data %>%
+  mutate(
+    pre_condition = "actual_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost  # Keep original
+  )
+
+counterfactual_data <- recode_data %>%
+  mutate(
+    pre_condition = "hypothetical_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost,  # Keep original
+    prepost = 1 - prepost
+  )
+
+full_counterfactual_set <- bind_rows(observed_data, counterfactual_data)
+
+preds_draws <- attend_march %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+
+```
+
+By setting it up in this way -- creating a copy of the dataset where pre and post are flipped --  the treatment effect for every respondent can be calculated (over many simulated draws from the posterior distribution). From here, I can then calculated different types of treatment effects -- average treatment effects and conditional average treatment effects.
+
+```{r, warning= FALSE, message = FALSE, echo = FALSE}
+ate_draws = preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+  ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  group_by(.draw, vote_trump, .category) %>%
+  summarise(
+    ate_draw_mean = mean(ate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(
+    ate_mean = mean(ate_draw_mean, na.rm = TRUE),
+    ate_sd = sd(ate_draw_mean, na.rm = TRUE),
+    ate_lower = quantile(ate_draw_mean, 0.025, na.rm = TRUE),
+    ate_upper = quantile(ate_draw_mean, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(vote_trump)) |>
+  mutate(
+         .category = factor(.category, labels = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))
+         )
+
+ate_draws |>
+  gt() |>
+  tab_header(
+    title = "Attend a March of Rally",
+    subtitle = "ATT = Change, Attending a March (Post - Pre Election), for Trump, Biden voters"
+  ) |>
+  fmt_number(
+    columns = vars(ate_mean, ate_sd, ate_lower, ate_upper),
+    decimals = 3
+  ) |>
+  cols_label(
+    vote_trump = "Voted for Trump",
+    .category = "Response Category",
+    ate_mean = "ATE Mean",
+    ate_sd = "ATE SD",
+    ate_lower = "2.5% CI",
+    ate_upper = "97.5% CI"
+  ) |>
+  tab_source_note(
+    source_note = "Data: Western States Survey 2020"
+  )
+```
+
+
+```{r, warning= FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
+
+# Calculate means for each group
+ate_means <- preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) %>%
+  mutate(ate = hypothetical_treatment - actual_treatment) %>%
+   mutate(
+  ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+# Main plot
+preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, .epred, pre_condition, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) %>%
+  mutate(ate = hypothetical_treatment - actual_treatment) %>%
+   mutate(
+  ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75,
+    bandwidth = 0.01,
+    scale = 2,
+    rel_min_height = 0.001,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  facet_wrap(~.category, scales = "free_x", labeller = labeller(.category = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))) +
+  scale_fill_manual(
+    values = c("Biden" = "#1f77b4", "Trump" = "#d62728")
+  ) +
+  labs(
+    title = "CATE, Attend March or Rally",
+    subtitle = "Posterior distribution CATE (predicted probability: post-election minus pre-election)\nDashed line = null effect (CATE = 0); Points = posterior mean for group",
+    x = "CATE",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+```
+
+
+## Imbalance
+
+Inclusion into the survey is partially known because we have an oversample of Latino voters...So I thought I'd include additional covariates, which we can similarly average across...
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+recode_data <- westernData %>%
+  recode_variable("criticize_election", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("burn_flag", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("court", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("recount", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("attend_march", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) 
+
+attend_march = brm(attend_march ~ prepost*vote_trump + white + latino + age +
+                     married + college, 
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 1,
+               refresh = 0)
+summary(attend_march)
+
+```
+
+```{r, warning= FALSE, message = FALSE, echo = FALSE}
+observed_data <- recode_data %>%
+  mutate(
+    pre_condition = "actual_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost  # Keep original
+  )
+
+counterfactual_data <- recode_data %>%
+  mutate(
+    pre_condition = "hypothetical_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost,  # Keep original
+    prepost = 1 - prepost
+  )
+
+full_counterfactual_set <- bind_rows(observed_data, counterfactual_data)
+
+preds_draws <- attend_march %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+
+```
+
+
+
+```{r, warning= FALSE, message = FALSE, echo = FALSE}
+
+
+ate_draws = preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  group_by(.draw, vote_trump, .category) %>%
+  summarise(
+    ate_draw_mean = mean(ate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(
+    ate_mean = mean(ate_draw_mean, na.rm = TRUE),
+    ate_sd = sd(ate_draw_mean, na.rm = TRUE),
+    ate_lower = quantile(ate_draw_mean, 0.025, na.rm = TRUE),
+    ate_upper = quantile(ate_draw_mean, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(vote_trump)) |>
+  mutate(
+         .category = factor(.category, labels = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))
+         )
+
+
+ate_draws |>
+  gt() |>
+  tab_header(
+    title = "Attend a March of Rally",
+    subtitle = "ATT = Change, Attending a March (Post - Pre Election), for Trump, Biden voters"
+  ) |>
+  fmt_number(
+    columns = vars(ate_mean, ate_sd, ate_lower, ate_upper),
+    decimals = 3
+  ) |>
+  cols_label(
+    vote_trump = "Voted for Trump",
+    .category = "Response Category",
+    ate_mean = "ATE Mean",
+    ate_sd = "ATE SD",
+    ate_lower = "2.5% CI",
+    ate_upper = "97.5% CI"
+  ) |>
+  tab_source_note(
+    source_note = "Data: Western States Survey 2020"
+  )
+```
+
+
+```{r, echo= FALSE, fig.width=8, fig.height=6, warning= FALSE, message = FALSE}
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+# Main plot
+preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, .epred, pre_condition, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) %>%
+  mutate(ate = hypothetical_treatment - actual_treatment) %>%
+   mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75,
+    bandwidth = 0.01,
+    scale = 2,
+    rel_min_height = 0.001,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  facet_wrap(~.category, scales = "free_x", labeller = labeller(.category = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))) +
+  scale_fill_manual(
+    values = c("Biden" = "#1f77b4", "Trump" = "#d62728")
+  ) +
+  labs(
+    title = "Conditional Average Treatment Effects",
+    subtitle = "Attend a March or Rally (predicted probability: post-election minus pre-election)\nDashed line = null effect (CATE = 0); Points = posterior mean for group",
+    x = "ATT",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+```
+
+## Heterogeneous Effects
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+attend_march = brm(attend_march ~ prepost*vote_trump*latino , 
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 1,
+               refresh = 0)
+print(attend_march)
+```
+
+
+
+```{r, warning= FALSE, message = FALSE, echo = FALSE}
+library(tidybayes)
+## Generate Predictions, The Observed Response and the Counterfactual Response
+preds_draws <- attend_march %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+```
+
+
+
+```{r, fig.width=8, fig.height=8, echo = FALSE, warning= FALSE, message = FALSE}
+library(ggplot2)
+library(ggridges)
+
+# Calculate means
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost, latino) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost, latino),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(
+    vote_trump = factor(vote_trump, levels = c("0", "1"), labels = c("Biden Voters", "Trump Voters")),
+    latino = factor(latino, levels = c("0", "1"), labels = c("Does not Identify as Latino", "Latino"))  # Add this
+  ) %>%
+  group_by(vote_trump, .category, latino) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+# Main plot
+preds_draws %>%
+  filter(!is.na(vote_trump)) %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, .epred, pre_condition, latino, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, latino, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) %>%
+  mutate(ate = hypothetical_treatment - actual_treatment) %>%
+   mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(
+    vote_trump = factor(vote_trump, levels = c("0", "1"), labels = c("Biden Voters", "Trump Voters")),
+    latino = factor(latino, levels = c("0", "1"), labels = c("Does not Identify as Latino", "Latino"))
+  ) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75, 
+    bandwidth = 0.01,
+    scale = 1,
+    rel_min_height = 0.01,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  facet_grid(latino ~ .category, labeller = labeller(.category = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))) +
+  scale_fill_manual(
+    values = c("Biden Voters" = "#1f77b4", "Trump Voters" = "#d62728")
+  ) +
+  labs(
+    title = "Conditional Average Treatment Effect",
+    subtitle = "Attend a Rally (predicted probability: post-election minus pre-election)\nDashed line = null effect (CATE = 0); Points = posterior mean",
+    x = "Conditional Average Treatment Effect",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+
+```
+
+##  Question Wording Effects
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+
+attend_march = brm(attend_march ~ prepost*vote_trump*violent_treat , 
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 1,
+               refresh =0)
+print(attend_march)
+
+```
+
+
+
+```{r, warning = FALSE, message = FALSE, echo = TRUE}
+preds_draws <- attend_march %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+```
+
+
+
+
+
+```{r,  warning = FALSE, message = FALSE, echo = FALSE, fig.width=7, fig.height=6}
+
+# Calculate means - with matching factor levels and original_prepost correction
+ate_means <- preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, .epred, pre_condition, violent_treat, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, violent_treat, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) %>%
+  mutate(ate = hypothetical_treatment - actual_treatment) %>%
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)  
+  ) %>%
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(
+    vote_trump = factor(vote_trump, levels = c("0", "1"), labels = c("Biden Voters", "Trump Voters")),
+    violent_treat = factor(violent_treat, levels = c("0", "1"), labels = c("Not Violent", "Violent"))  # MATCH order below
+  ) %>%
+  group_by(vote_trump, .category, violent_treat) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+# Main plot
+preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, .epred, pre_condition, violent_treat, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, violent_treat, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) %>%
+  mutate(ate = hypothetical_treatment - actual_treatment) %>%
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)  # Correct for observation order
+  ) %>%
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(
+    vote_trump = factor(vote_trump, levels = c("0", "1"), labels = c("Biden Voters", "Trump Voters")),
+    violent_treat = factor(violent_treat, levels = c("0", "1"), labels = c("Not Violent", "Violent"))
+  ) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75, 
+    bandwidth = 0.01,
+    scale = 2,
+    rel_min_height = 0.001,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  facet_grid(violent_treat ~ .category, labeller = labeller(.category = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))) +
+  scale_fill_manual(
+    values = c("Biden Voters" = "#1f77b4", "Trump Voters" = "#d62728")
+  ) +
+  labs(
+    title = "Conditional Average Treatment Effect",
+    subtitle = "(predicted probability: post-election minus pre-election)\nDashed line = null effect (CATE = 0); Points = posterior mean",
+    x = "Conditinal Average Treatment Effect",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+```
+
+## Other Item Analysis 
+
+The remaining items -- flag burning, court challenges, election recounts, criticizing the election -- are:
+
+### Flag Burning
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
+
+recode_data <- westernData %>%
+  recode_variable("criticize_election", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("burn_flag", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("court", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("recount", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
+  recode_variable("attend_march", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) 
+
+burn_flag = brm(burn_flag ~ prepost*vote_trump + 
+                  white + latino + age +
+                  married + college, 
+               data = recode_data,
+               family = categorical(),
+               cores = 10,
+               iter = 2000,
+               chains = 1,
+               refresh = 0)
+
+print(burn_flag)
+
+observed_data <- recode_data %>%
+  mutate(
+    pre_condition = "actual_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost  # Keep original
+  )
+
+counterfactual_data <- recode_data %>%
+  mutate(
+    pre_condition = "hypothetical_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost,  # Keep original
+    prepost = 1 - prepost
+  )
+
+full_counterfactual_set <- bind_rows(observed_data, counterfactual_data)
+
+preds_draws <- burn_flag %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+
+
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+ate_draws = preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  group_by(.draw, vote_trump, .category) |>
+  summarise(
+    ate_draw_mean = mean(ate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(
+    ate_mean = mean(ate_draw_mean, na.rm = TRUE),
+    ate_sd = sd(ate_draw_mean, na.rm = TRUE),
+    ate_lower = quantile(ate_draw_mean, 0.025, na.rm = TRUE),
+    ate_upper = quantile(ate_draw_mean, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(vote_trump)) |>
+  mutate(
+         .category = factor(.category, labels = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))
+         )
+
+ate_draws |>
+  gt() |>
+  tab_header(
+    title = "Conditional Average Treatment Effects",
+    subtitle = "Flag Burning (Post - Pre Election), for Trump, Biden voters"
+  ) |>
+  fmt_number(
+    columns = vars(ate_mean, ate_sd, ate_lower, ate_upper),
+    decimals = 3
+  ) |>
+  cols_label(
+    vote_trump = "Voted for Trump",
+    .category = "Response Category",
+    ate_mean = "ATE Mean",
+    ate_sd = "ATE SD",
+    ate_lower = "2.5% CI",
+    ate_upper = "97.5% CI"
+  ) |>
+  tab_source_note(
+    source_note = "Data: Western States Survey 2020"
+  )
+```
+
+
+```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
+
+# Calculate means for each group
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75,
+    bandwidth = 0.05,
+    scale = 2,
+    rel_min_height = 0.001,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  facet_wrap(~.category, scales = "free_x", labeller = labeller(.category = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))) +
+  scale_fill_manual(
+    values = c("Biden" = "#1f77b4", "Trump" = "#d62728")
+  ) +
+  labs(
+    title = "Conditional Averate Treatment Effects",
+    subtitle = "Flag Burning (predicted probability: post-election minus pre-election)\nDashed line = null effect (CATE = 0); Points = posterior mean for group",
+    x = "CATE",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+```
+
+### Ballot Recounts
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
+
+
+recount = brm(recount ~ prepost*vote_trump + 
+                  white + latino + age +
+                  married + college, 
+               data = recode_data,
+               family = categorical(),
+               cores = 10,
+               iter = 2000,
+               chains = 1,
+               refresh = 0)
+
+print(recount)
+
+observed_data <- recode_data %>%
+  mutate(
+    pre_condition = "actual_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost  # Keep original
+  )
+
+counterfactual_data <- recode_data %>%
+  mutate(
+    pre_condition = "hypothetical_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost,  # Keep original
+    prepost = 1 - prepost
+  )
+
+full_counterfactual_set <- bind_rows(observed_data, counterfactual_data)
+
+preds_draws <- recount %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+
+
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+ate_draws = preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  group_by(.draw, vote_trump, .category) |>
+  summarise(
+    ate_draw_mean = mean(ate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(
+    ate_mean = mean(ate_draw_mean, na.rm = TRUE),
+    ate_sd = sd(ate_draw_mean, na.rm = TRUE),
+    ate_lower = quantile(ate_draw_mean, 0.025, na.rm = TRUE),
+    ate_upper = quantile(ate_draw_mean, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(vote_trump)) |>
+  mutate(
+         .category = factor(.category, labels = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))
+         )
+
+ate_draws |>
+  gt() |>
+  tab_header(
+    title = "Conditional Average Treatment Effect",
+    subtitle = "Ballot Recounts (Post - Pre Election) for Trump, Biden voters"
+  ) |>
+  fmt_number(
+    columns = vars(ate_mean, ate_sd, ate_lower, ate_upper),
+    decimals = 3
+  ) |>
+  cols_label(
+    vote_trump = "Voted for Trump",
+    .category = "Response Category",
+    ate_mean = "ATE Mean",
+    ate_sd = "ATE SD",
+    ate_lower = "2.5% CI",
+    ate_upper = "97.5% CI"
+  ) |>
+  tab_source_note(
+    source_note = "Data: Western States Survey 2020"
+  )
+```
+
+
+```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
+
+# Calculate means for each group
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75,
+    bandwidth = 0.05,
+    scale = 2,
+    rel_min_height = 0.001,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  facet_wrap(~.category, scales = "free_x", labeller = labeller(.category = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))) +
+  scale_fill_manual(
+    values = c("Biden" = "#1f77b4", "Trump" = "#d62728")
+  ) +
+  labs(
+    title = "Conditional Average Treatment Effect",
+    subtitle = "Ballot Recounts (predicted probability: post-election minus pre-election)\nDashed line = null effect (CATE = 0); Points = posterior mean for group",
+    x = "CATE",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+```
+
+### Criticize Eleciton
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
+
+
+criticize_election = brm(criticize_election ~ prepost*vote_trump + 
+                  white + latino + age +
+                  married + college, 
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 1,
+               refresh = 0)
+
+print(criticize_election)
+
+observed_data <- recode_data %>%
+  mutate(
+    pre_condition = "actual_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost  # Keep original
+  )
+
+counterfactual_data <- recode_data %>%
+  mutate(
+    pre_condition = "hypothetical_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost,  # Keep original
+    prepost = 1 - prepost
+  )
+
+full_counterfactual_set <- bind_rows(observed_data, counterfactual_data)
+
+preds_draws <- criticize_election %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+
+
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+ate_draws = preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  group_by(.draw, vote_trump, .category) |>
+  summarise(
+    ate_draw_mean = mean(ate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(
+    ate_mean = mean(ate_draw_mean, na.rm = TRUE),
+    ate_sd = sd(ate_draw_mean, na.rm = TRUE),
+    ate_lower = quantile(ate_draw_mean, 0.025, na.rm = TRUE),
+    ate_upper = quantile(ate_draw_mean, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(vote_trump)) |>
+  mutate(
+         .category = factor(.category, labels = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))
+         )
+
+ate_draws |>
+  gt() |>
+  tab_header(
+    title = "Conditional Average Treatment Effect",
+    subtitle = "Criticize Election (Post - Pre Election) for Trump, Biden voters"
+  ) |>
+  fmt_number(
+    columns = vars(ate_mean, ate_sd, ate_lower, ate_upper),
+    decimals = 3
+  ) |>
+  cols_label(
+    vote_trump = "Voted for Trump",
+    .category = "Response Category",
+    ate_mean = "ATE Mean",
+    ate_sd = "ATE SD",
+    ate_lower = "2.5% CI",
+    ate_upper = "97.5% CI"
+  ) |>
+  tab_source_note(
+    source_note = "Data: Western States Survey 2020"
+  )
+```
+
+
+```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
+
+# Calculate means for each group
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75,
+    bandwidth = 0.05,
+    scale = 2,
+    rel_min_height = 0.001,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  facet_wrap(~.category, scales = "free_x", labeller = labeller(.category = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))) +
+  scale_fill_manual(
+    values = c("Biden" = "#1f77b4", "Trump" = "#d62728")
+  ) +
+  labs(
+    title = "Conditional Average Treatment Effect",
+    subtitle = "Criticize Election (predicted probability: post-election minus pre-election)\nDashed line = null effect (CATE = 0); Points = posterior mean for group",
+    x = "CATE",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+```
+
+
+### Contest Election in Court
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
+
+
+court = brm(court ~ prepost*vote_trump + 
+                  white + latino + age +
+                  married + college, 
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 1,
+               refresh = 0)
+
+print(court)
+
+observed_data <- recode_data %>%
+  mutate(
+    pre_condition = "actual_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost  # Keep original
+  )
+
+counterfactual_data <- recode_data %>%
+  mutate(
+    pre_condition = "hypothetical_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost,  # Keep original
+    prepost = 1 - prepost
+  )
+
+full_counterfactual_set <- bind_rows(observed_data, counterfactual_data)
+
+preds_draws <- court %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+
+
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+ate_draws = preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  group_by(.draw, vote_trump, .category) |>
+  summarise(
+    ate_draw_mean = mean(ate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(
+    ate_mean = mean(ate_draw_mean, na.rm = TRUE),
+    ate_sd = sd(ate_draw_mean, na.rm = TRUE),
+    ate_lower = quantile(ate_draw_mean, 0.025, na.rm = TRUE),
+    ate_upper = quantile(ate_draw_mean, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(vote_trump)) |>
+  mutate(
+         .category = factor(.category, labels = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))
+         )
+
+ate_draws |>
+  gt() |>
+  tab_header(
+    title = "Conditional Average Treatment Effect",
+    subtitle = "Contest Election in Court (Post - Pre Election) for Trump, Biden voters"
+  ) |>
+  fmt_number(
+    columns = vars(ate_mean, ate_sd, ate_lower, ate_upper),
+    decimals = 3
+  ) |>
+  cols_label(
+    vote_trump = "Voted for Trump",
+    .category = "Response Category",
+    ate_mean = "ATE Mean",
+    ate_sd = "ATE SD",
+    ate_lower = "2.5% CI",
+    ate_upper = "97.5% CI"
+  ) |>
+  tab_source_note(
+    source_note = "Data: Western States Survey 2020"
+  )
+```
+
+
+```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
+
+# Calculate means for each group
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump, .category) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, .category, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, .category, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75,
+    bandwidth = 0.05,
+    scale = 2,
+    rel_min_height = 0.001,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  facet_wrap(~.category, scales = "free_x", labeller = labeller(.category = c("1" = "Oppose", "2" = "Neutral", "3" = "Support"))) +
+  scale_fill_manual(
+    values = c("Biden" = "#1f77b4", "Trump" = "#d62728")
+  ) +
+  labs(
+    title = "Conditional Average Treatment Effect",
+    subtitle = "Contest Election in Court (predicted probability: post-election minus pre-election)\nDashed line = null effect (CATE = 0); Points = posterior mean for group",
+    x = "CATE",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+```
+
+
+## Average Contestation Scores
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+westernData |>
+  mutate(
+    contestation_score = rowSums(across(c(
+      criticize_election,
+      burn_flag,
+      court,
+      recount,
+      attend_march
+    )), na.rm = TRUE) |>
+      scale()
+  ) -> recode_data
+contestation_score = brm(contestation_score ~ prepost*vote_trump + white + latino + age +
+                     married + college, 
+               data = recode_data,
+               family = gaussian(),
+               cores = 10,
+               iter = 2000,
+               chains = 3,
+               refresh = 0)
+
+print(contestation_score)
+```
+
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+observed_data <- recode_data %>%
+  mutate(
+    pre_condition = "actual_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost  # Keep original
+  )
+
+counterfactual_data <- recode_data %>%
+  mutate(
+    pre_condition = "hypothetical_treatment",
+    respondent_id = row_number(),
+    original_prepost = prepost,  # Keep original
+    prepost = 1 - prepost
+  )
+
+full_counterfactual_set <- bind_rows(observed_data, counterfactual_data)
+
+preds_draws <- contestation_score %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set, 
+    ndraws = 500
+  )
+
+ate_draws = preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |> 
+  group_by(.draw, vote_trump) |>
+  summarise(
+    ate_draw_mean = mean(ate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(vote_trump) %>%
+  summarise(
+    ate_mean = mean(ate_draw_mean, na.rm = TRUE),
+    ate_sd = sd(ate_draw_mean, na.rm = TRUE),
+    ate_lower = quantile(ate_draw_mean, 0.025, na.rm = TRUE),
+    ate_upper = quantile(ate_draw_mean, 0.975, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(vote_trump)) 
+
+
+ate_draws |>
+  gt() |>
+  tab_header(
+    title = "Mean Contestation Score",
+    subtitle = "Conditional Average Treatment Effect  Change, Court (Post - Pre Election), for Trump, Biden voters"
+  ) |>
+  fmt_number(
+    columns = vars(ate_mean, ate_sd, ate_lower, ate_upper),
+    decimals = 3
+  ) |>
+  cols_label(
+    vote_trump = "Voted for Trump",
+    ate_mean = "ATE Mean",
+    ate_sd = "ATE SD",
+    ate_lower = "2.5% CI",
+    ate_upper = "97.5% CI"
+  ) |>
+  tab_source_note(
+    source_note = "Data: Western States Survey 2020"
+  )
+```
+
+
+```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
+# Calculate means for each group
+ate_means <-
+  preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  group_by(vote_trump) %>%
+  summarise(mean_ate = mean(ate, na.rm = TRUE), .groups = "drop")
+
+
+
+# Main plot
+ preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, respondent_id, vote_trump, pre_condition, .epred, original_prepost) %>%
+  pivot_wider(
+    id_cols = c(.draw, respondent_id, vote_trump, original_prepost),
+    names_from = pre_condition,
+    values_from = .epred
+  ) |>
+  mutate(
+    ate = hypothetical_treatment - actual_treatment
+  ) |>
+  mutate(
+    ate = if_else(original_prepost == 1, -ate, ate)
+  ) |>
+  filter(!is.na(vote_trump), !is.na(ate)) %>%
+  mutate(vote_trump = factor(vote_trump, labels = c("0" = "Biden", "1" = "Trump"))) %>%
+  ggplot(aes(x = ate, y = vote_trump, fill = vote_trump)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#999999", linewidth = 0.7, alpha = 0.8) +
+  geom_density_ridges(
+    alpha = 0.75,
+    bandwidth = 0.01,
+    scale = 2,
+    rel_min_height = 0.001,
+    color = NA
+  ) +
+  geom_point(
+    data = ate_means,
+    aes(x = mean_ate, y = vote_trump, fill = vote_trump),
+    size = 3,
+    color = "white",
+    stroke = 1.5,
+    inherit.aes = FALSE,
+    shape = 21
+  ) +
+  scale_fill_manual(
+    values = c("Biden" = "#1f77b4", "Trump" = "#d62728")
+  ) +
+  labs(
+    title = "Conditional Average Treatment Effects",
+    subtitle = "Mean Contestation Score (predicted probability: post-election minus pre-election)\nDashed line = null effect (ATE = 0); Points = posterior mean for group",
+    x = "ATT",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "#555555", margin = margin(b = 15)),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "#eeeeee", linewidth = 0.3),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 10)),
+    axis.text = element_text(size = 10),
+    legend.position = "none"
+  )
+```
+
+
+<!-- ### Plot Options -->
+
+<!-- ```{r} -->
+
+<!-- attend_march = brm(attend_march ~ prepost*vote_trump,  -->
+<!--                data = recode_data, -->
+<!--                family = cumulative("logit"), -->
+<!--                cores = 10, -->
+<!--                iter = 2000, -->
+<!--                chains = 1) -->
+
+
+<!-- D_matrix = expand_grid( -->
+<!--   prepost = c(0, 1), -->
+<!--   vote_trump = c(0, 1) -->
+<!-- )  -->
+
+<!-- predictive_effects_summary( -->
+<!--   model = attend_march, -->
+<!--   predictor_grid = D_matrix, -->
+<!--   group_vars = c("prepost", "vote_trump") -->
+<!-- ) -> predictive_effects_summary -->
+<!-- ``` -->
+
+<!-- # Construct Marginal Effects -->
+
+<!-- The above functions, datasets are trivial to construct. Marginal effects are a little more complicated. Here's how I accomplished this.I construct the marginal effect as follows: -->
+
+<!-- -   Construct a design matrix -- generate predictions when `prepost` $\in 0,1$ and `vote_trump` $\in 0,1$. -->
+<!-- -   Pivot the data to wide and construct the differences, the marginal effects. -->
+<!-- -   Pivot back to long so that we can summarize the data. -->
+<!-- -   Generate mean marginal effects, for each category, when comparing `prepost` = 1 versus `prepost` = 0, for each level of `vote_trump`. -->
+
+<!-- Below is a hardcoded version that only works with 3 category data and the `prepost` variable as the contrast, and `vote_trump` as the moderator. This is followed with a generic function which does the same thing, which I'll use in a moment. -->
+
+<!-- ```{r} -->
+<!-- library(brms) -->
+<!-- library(tidybayes) -->
+
+<!-- D_matrix = expand_grid( -->
+<!--   prepost = c(0, 1), -->
+<!--   vote_trump = c(0, 1) -->
+<!-- )  -->
+
+<!-- ## Construct Marginal Effects   -->
+<!-- D_matrix |>  -->
+<!-- add_epred_draws(attend_march) |>  -->
+<!--   pivot_wider( -->
+<!--     names_from = .category, -->
+<!--     values_from = .epred, -->
+<!--     names_prefix = "prob_" -->
+<!--   ) |>  -->
+<!--   ungroup() |> -->
+<!--  dplyr::select(-c(.row, .chain, .iteration)) |>  -->
+<!-- pivot_wider( -->
+<!--     names_from = prepost, -->
+<!--     values_from = starts_with("prob_"), -->
+<!--     names_sep = "_" -->
+<!--   ) |> -->
+<!--   mutate( -->
+<!--     marginal_effect_1 = prob_1_1 - prob_1_0, -->
+<!--     marginal_effect_2 = prob_2_1 - prob_2_0, -->
+<!--     marginal_effect_3 = prob_3_1 - prob_3_0 -->
+<!--   ) |> -->
+<!--   dplyr::select(vote_trump, .draw, starts_with("marginal_effect")) %>% -->
+<!--   ungroup() %>% -->
+<!--   group_by(vote_trump) %>% -->
+<!--   summarise( -->
+<!--     mean1 = mean(marginal_effect_1), -->
+<!--     sd1 = sd(marginal_effect_1), -->
+<!--     lower1 = quantile(marginal_effect_1, 0.025), -->
+<!--     upper1 = quantile(marginal_effect_1, 0.975), -->
+<!--     mean2 = mean(marginal_effect_2), -->
+<!--     sd2 = sd(marginal_effect_2), -->
+<!--     lower2 = quantile(marginal_effect_2, 0.025), -->
+<!--     upper2 = quantile(marginal_effect_2, 0.975), -->
+<!--     mean3 = mean(marginal_effect_3), -->
+<!--     sd3 = sd(marginal_effect_3), -->
+<!--     lower3 = quantile(marginal_effect_3, 0.025), -->
+<!--     upper3 = quantile(marginal_effect_3, 0.975), -->
+<!--     .groups = "drop" -->
+<!--   ) |> -->
+<!-- pivot_longer( -->
+<!--   cols = -vote_trump, -->
+<!--   names_to = c(".value", "category"), -->
+<!--   names_pattern = "(.+)(\\d)$" -->
+<!-- ) -> marginal_effect -->
+
+<!-- ``` -->
+
+<!-- ## Generalized Function -->
+
+<!-- The above function is hardcoded to work with `prepost` as the contrast variable, and `vote_trump` as the moderator, with three categories. Let's make it more generalizable -->
+
+<!-- ```{r} -->
+<!-- marginal_effects_summary <- calculate_marginal_effects( -->
+<!--      model = attend_march,  -->
+<!--      contrast_var = prepost,  -->
+<!--      contrast_vals = c(0, 1),  -->
+<!--      moderators = tibble(vote_trump = c(0, 1)) -->
+<!--  ) -->
+<!-- head(marginal_effects_summary) -->
+<!-- ``` -->
+
+<!-- The three dataframes, `observed_counts`, `predictive_effects_summary`, and `marginal_effects_summary` are now ready for plotting. \## This is how it should look. -->
+
+<!-- The margins for the plot are generated with `observed_counts`, whereas the dot-lines are generated with `predictive_effects_summary`. This constitutes the left panel of the plot. The right panel is generated from `marginal_effects_summary`. -->
+
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+<!-- library(vayr) -->
+
+<!-- ggplot(aes(x = factor(prepost, labels = c("Pre Election", "Post Election")), y = mean, color = .category, group = .category), -->
+<!--        data = predictive_effects_summary) + -->
+<!--   geom_point(size = 3, alpha = 0.35) + -->
+<!--   geom_errorbar(aes(ymin = lower, ymax = upper), -->
+<!--                 width = 0.01, linewidth = 0.9, alpha = 0.5) + -->
+<!--   facet_wrap(~ factor(vote_trump, labels = c("Biden", "Trump")), ncol = 1) + -->
+<!--   geom_line() +  -->
+<!--   theme_minimal() + -->
+<!--     labs( -->
+<!--     x = "", -->
+<!--     y = "Predicted Probability", -->
+<!--     color = "Response\nCategory", -->
+<!--     title = "Predicted Probabilities", -->
+<!--     subtitle = "" -->
+<!--   ) + -->
+<!--     scale_y_continuous(limits = c(0, 0.8), breaks = seq(0, 1, 0.2)) + -->
+<!--     theme_minimal(base_size = 12, base_family = "sans") + -->
+<!--     theme( -->
+<!--         plot.title = element_text(size = 12, face = "bold", margin = margin(b = 5)), -->
+<!--         plot.subtitle = element_text(size = 10, color = "gray40", margin = margin(b = 15)), -->
+<!--         panel.grid.major.x = element_blank(), -->
+<!--         panel.grid.minor = element_blank(), -->
+<!--         panel.grid.major.y = element_line(color = "gray95", size = 0.3), -->
+<!--         strip.text = element_text(size = 12, face = "bold", color = "gray20"), -->
+<!--         strip.background = element_rect(fill = "gray95", color = "white"), -->
+<!--         axis.text = element_text(size = 10, color = "gray30"), -->
+<!--         axis.title = element_text(size = 11, color = "gray20", face = "bold"), -->
+<!--         legend.position = "bottom", -->
+<!--         legend.text = element_text(size = 10), -->
+<!--         plot.margin = margin(20, 20, 20, 20) -->
+<!--     ) + -->
+<!--   scale_color_manual(values = c("1" = "black", "2" = "grey", "3" = "lightgrey"), -->
+<!--                      labels = c("1" = "Oppose", "2" = "Neutral", "3" = "Support")) -> predictive_effects -->
+
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- marginal_effects_summary %>% -->
+<!--   ggplot(aes(x = .category, y = mean, color = factor(vote_trump))) + -->
+<!--   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", size = 0.8) + -->
+<!--   geom_point(size = 2, position = position_dodge(width = 0.3)) + -->
+<!--   geom_errorbar(aes(ymin = lower, ymax = upper), -->
+<!--                 width = 0.15, size = 1,  -->
+<!--                 position = position_dodge(width = 0.3), alpha = 0.4) + -->
+<!--   scale_x_discrete(labels = c("1" = "Oppose",  -->
+<!--                               "2" = "Neutral",  -->
+<!--                               "3" = "Support")) + -->
+<!--   scale_color_manual(name = "Vote Choice", -->
+<!--                      values = c("0" = "black", "1" = "grey"), -->
+<!--                      labels = c("0" = "Biden", "1" = "Trump")) + -->
+<!--   labs( -->
+<!--     x = "Response Category", -->
+<!--     y = "Marginal Effect (Post - Pre)", -->
+<!--     title = "Marginal Effects", -->
+<!--     subtitle = "Error bars are 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal(base_size = 12) + -->
+<!--     theme( -->
+<!--         plot.title = element_text(size = 12, face = "bold", margin = margin(b = 5)), -->
+<!--         plot.subtitle = element_text(size = 10, color = "gray40", margin = margin(b = 15)), -->
+<!--         panel.grid.major.x = element_blank(), -->
+<!--         panel.grid.minor = element_blank(), -->
+<!--         panel.grid.major.y = element_line(color = "gray95", size = 0.3), -->
+<!--         strip.text = element_text(size = 12, face = "bold", color = "gray20"), -->
+<!--         strip.background = element_rect(fill = "gray95", color = "white"), -->
+<!--         axis.text = element_text(size = 10, color = "gray30"), -->
+<!--         axis.title = element_text(size = 11, color = "gray20", face = "bold"), -->
+<!--         legend.position = "bottom", -->
+<!--         legend.text = element_text(size = 10), -->
+<!--         plot.margin = margin(20, 20, 20, 20) -->
+<!--     ) + -->
+<!--   coord_flip() -> marginal_effects -->
+<!-- ``` -->
+
+<!-- ```{r, fig.width=10, fig.height=6} -->
+<!-- library(patchwork) -->
+<!-- predictive_effects + marginal_effects +  -->
+<!--   plot_layout(widths = c(0.3, 0.5), -->
+<!--               heights = c(1, 0.5)) + -->
+<!-- plot_annotation( -->
+<!--   title = "Attending a March or Rally", -->
+<!--   subtitle = "Predicted probabilities and marginal effects by vote choice", -->
+<!--   caption = "Source: Western States Survey 2020. N = 2,000 respondents.", -->
+<!--   theme = theme( -->
+<!--     plot.title = element_text(size = 16, face = "bold", hjust = 0), -->
+<!--     plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0, margin = margin(t = 5)), -->
+<!--     plot.caption = element_text(size = 10, color = "gray60", hjust = 1) -->
+<!--   ) -->
+<!-- ) -->
+
+<!-- ``` -->
+
+<!-- From the *pre* to *post* period, Trump voters increased their support for attending a march or rally by about 10 points ($\Delta_y = 0.971, SD = 0.024, 95% \text{Credible Interval} = 0.0520, 0.147)$). Biden voters show the opposite pattern, decreasing their support by about 5 points ($\Delta_y = -0.0612, SD = 0.0246, 95% \text{Credible Interval} = -0.109, -0.002$). -->
+
+<!-- ## Counterfactual Estimation -->
+
+<!-- In the previous iteration of our paper, we used structural *G*-estimation to compute counterfactuals. The logic is to (1) estimate the treatment model -- here exposure to *pre* or *post* election -- as a function of covariates, (2) use the treatment model to generate predicted probabilities of treatment assignment, (3) create a counterfactual dataset where the treatment is inverted for all respondents, and (4) generate predicted values from the outcome model for both the observed and counterfactual datasets. The difference between the two is the average treatment effect. Here's a similar approach using Bayesian estimation. -->
+
+<!-- ```{r} -->
+<!-- library(dplyr) -->
+
+<!-- ## Fit Model -->
+<!-- attend_march = brm(attend_march ~ prepost*vote_trump + female + age +  -->
+<!--                      libcon + authoritarianism + faminc + college  ,  -->
+<!--                data = recode_data, -->
+<!--                family = cumulative("logit"), -->
+<!--                cores = 10, -->
+<!--                iter = 2000, -->
+<!--                chains = 1) -->
+
+<!-- # Generate two copies of data, one observed, one counterfactual -->
+
+<!-- # Observed Condition:  -->
+<!-- observed_data <- recode_data %>% -->
+<!--   mutate(pre_condition = "actual_treatment") -->
+
+
+
+<!-- # Counterfactual Condition: If you voted -->
+<!-- counterfactual_data <- recode_data %>% -->
+<!--   mutate( -->
+<!--     pre_condition = "hypothetical_treatment", -->
+<!--     prepost = 1 - prepost # Flips 0 to 1, and 1 to 0 for everyone -->
+<!--   ) -->
+
+<!-- # Combine them into a single data frame for prediction -->
+<!-- full_counterfactual_set <- bind_rows(observed_data, counterfactual_data) -->
+<!-- ``` -->
+
+<!-- ## Two Scenarios -->
+
+<!-- I've created two copies of the same data -- one where `prepost` is observed, and one where `prepost` is flipped for everyone, the counterfactual. Now we can generate predicted values for both scenarios at the individual level. -->
+
+<!-- ```{r} -->
+
+<!-- individual_preds <- fitted( -->
+<!--   attend_march,  -->
+<!--   newdata = full_counterfactual_set, -->
+<!--   summary = FALSE  -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- # Example of how you might aggregate the individual effects  -->
+<!-- # (requires advanced data wrangling beyond base matrix manipulation) -->
+
+<!-- library(tidybayes) -->
+
+<!-- # Use posterior_epred_draws to get the expected outcome for each draw/person/condition -->
+<!-- preds_draws <- attend_march %>% -->
+<!--   add_epred_draws( -->
+<!--     newdata = full_counterfactual_set,  -->
+<!--     re_formula = NA # Optional: Ignores group-level effects if you have them -->
+<!--   ) -->
+
+<!-- # Separate the observed and counterfactual predictions using the 'condition' column -->
+<!-- individual_effects <- preds_draws %>% -->
+<!--   ungroup() %>% -->
+<!--   select(.draw, id_column, condition, .epred) %>% # You'll need an 'id_column' in your original data -->
+<!--   spread(condition, .epred) %>% -->
+<!--   mutate(individual_effect = actual_vote - hypothetical_vote) -->
+
+<!-- # Summarize the average effect across all individuals -->
+<!-- average_counterfactual_effect <- individual_effects %>% -->
+<!--   summarise( -->
+<!--     mean_ate = mean(individual_effect), -->
+<!--     lower_ci = quantile(individual_effect, 0.025), -->
+<!--     upper_ci = quantile(individual_effect, 0.975) -->
+<!--   ) -->
+
+<!-- print(average_counterfactual_effect) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # Expected value plot with 1-5 scale and labeled points -->
+<!--  ggplot(marginal_effects_summary, aes(x = prepost_label, y = mean,  -->
+<!--                                color = vote_trump_label, group = vote_trump_label)) + -->
+<!--   # Add midpoint reference line at 3 -->
+<!--   geom_hline(yintercept = 3, linetype = "dashed", color = "gray50", linewidth = 0.5) + -->
+<!--   # geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = vote_trump_label), -->
+<!--   #             alpha = 0.2, color = NA) + -->
+<!--   geom_line(linewidth = 0.5) + -->
+<!--   geom_point(size = 4, alpha = 0.3) + -->
+<!--   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), -->
+<!--                 width = 0.005, linewidth = 1) + -->
+<!--   labs( -->
+<!--     x = "", -->
+<!--     y = "Expected Support Level", -->
+<!--     color = "Vote Choice", -->
+<!--     fill = "Vote Choice", -->
+<!--     title = "Attend a March or Rally", -->
+<!--     subtitle = "Expected value = sum(category x probability) with 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     legend.position = "bottom", -->
+<!--     panel.grid.major.x = element_blank() -->
+<!--   ) + -->
+<!--   scale_y_continuous( -->
+<!--     limits = c(2, 4), -->
+<!--     breaks = 2:4, -->
+<!--     labels = c("2" = "Oppose",  -->
+<!--                "3" = "Neutral",  -->
+<!--                "4" = "Support") -->
+<!-- ``` -->
+
+<!-- The Pre/Post comparisons can be presented like this, -->
+
+<!-- ```{r} -->
+
+<!-- plotDots(plot_burn$plotting_data |> -->
+<!--           filter(vote_trump == 0),  -->
+<!--           y_var = "mean_prob", -->
+<!--           color_var = "prepost", -->
+<!--           x_var = "category", -->
+<!--           color_levels = c(0, 1), -->
+<!--           color_labels = c("Pre", "Post"), -->
+<!--           color_values = c("grey", "black"), -->
+<!--           title = "Flag Burning", -->
+<!--           category_levels = c("1", "2", "3"), -->
+<!--           category_labels = c("Disagree", "Neither","Agree")) -->
+<!-- ``` -->
+
+<!-- Or like this, -->
+
+<!-- ```{r} -->
+<!-- library(dplyr) -->
+<!-- plotSunflowerDots( -->
+<!--   list( -->
+<!--     plotting_data = plot_burn$plotting_data |> filter(vote_trump == 1), -->
+<!--     observed_counts = plot_burn$observed_counts |> filter(vote_trump == 1) -->
+<!--   ), -->
+<!--   join_vars = c("category", "prepost"), -->
+<!--   color_levels = c(1, 0), -->
+<!--   color_labels = c("Post", "Pre"), -->
+<!--   color_values = c("grey", "black"), -->
+<!--   title = "Flag Burning\nTrump Voters", -->
+<!--   x_label = "", -->
+<!--   y_label = "Predicted Probability", -->
+<!--   mean_point_size = 2, -->
+<!--   mean_point_alpha = 0.1, -->
+<!--   sunflower_size = 0.15, -->
+<!--   sunflower_alpha = 0.3, -->
+<!--   y_limits = c(0, 0.6), -->
+<!--   dodge_width = 0.65, -->
+<!--   sunflower_density = 50, -->
+<!--   sunflower_aspect_ratio = 10, -->
+<!-- ) -->
+
+<!-- # Test example for create_combined_sunflower -->
+
+<!-- create_combined_sunflower( -->
+<!--   plot_data = plot_burn, -->
+<!--   predictions = predictions_burn, -->
+<!--   main_title = "Flag Burning", -->
+<!--   subtitle = "Comparing Biden and Trump Voters Before and After the 2020 Election", -->
+<!--   caption = "Source: Western States Survey 2020. Lines connect conditions. N = 2,000 respondents.", -->
+<!--   moderator = "vote_trump", -->
+<!--   moderator_levels = c(0, 1), -->
+<!--   group_labels = c("Biden Voters", "Trump Voters"), -->
+<!--   category_levels = c("1", "2", "3", "4", "5"), -->
+<!--   category_labels = c("Strongly Oppose", "Oppose", "Neutral", "Support", "Strongly Support"), -->
+<!--   x_var = "prepost_label", -->
+<!--   join_vars = c("prepost", "category", "vote_trump"), -->
+<!--   focal_var = "prepost", -->
+<!--   focal_contrast = c(0, 1), -->
+<!--   colors = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey",  -->
+<!--             "4" = "darkslategrey", "5" = "black"), -->
+<!--   sunflower_params = list( -->
+<!--     sunflower_size = 0.15, -->
+<!--     sunflower_alpha = 0.3, -->
+<!--     errorbar_width = 0.1, -->
+<!--     errorbar_linewidth = 0.8, -->
+<!--     line_linewidth = 1, -->
+<!--     dodge_width = 0.65, -->
+<!--     sunflower_density = 50, -->
+<!--     sunflower_aspect_ratio = 10, -->
+<!--     y_limits = c(0, 0.6), -->
+<!--     y_breaks = seq(0, 0.6, 0.1) -->
+<!--   ), -->
+<!--   marginal_params = list( -->
+<!--     point_size = 2, -->
+<!--     point_alpha = 0.8, -->
+<!--     show_errorbar = TRUE, -->
+<!--     errorbar_width = 0.2, -->
+<!--     reference_line = 0, -->
+<!--     y_limits = c(-0.3, 0.3) -->
+<!--   ) -->
+<!-- ) -->
+
+
+<!-- ``` -->
+
+<!-- Or like this, -->
+
+<!-- ```{r} -->
+<!-- devtools::load_all() -->
+<!-- library(ggplot2) -->
+<!-- # Plot Trump voters -->
+<!-- plot_dat_labeled <- plot_burn$plotting_data %>% -->
+<!--     mutate( -->
+<!--     prepost_label = factor(prepost, levels = c(0, 1),  -->
+<!--                            labels = c("Pre-Election", "Post-Election")) -->
+<!--     ) |>  -->
+<!--   filter(vote_trump == 1)  -->
+
+<!-- plotSunflower( -->
+<!--     pred_summary = plot_dat_labeled, -->
+<!--     observed_counts = plot_burn$observed_counts |> filter(!is.na(vote_trump)) |> filter(vote_trump == 1), -->
+<!--     x_var = "prepost_label", -->
+<!--     join_vars = c("prepost", "vote_trump", "category"), -->
+<!--     title = "Trump Voters" -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- The information is identical, just conveyed in slighty different ways. -->
+
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+
+<!-- create_combined_plot( -->
+<!--   plot_data = plot_burn, -->
+<!--   predictions = predictions_burn, -->
+<!--   main_title = "Flag Burning", -->
+<!--   subtitle = "Comparing Biden and Trump Voters Before and After the 2020 Election", -->
+<!--   caption = "Source: Western States Survey 2020. Error bars show 95% credible intervals. N = 2,000 respondents.", -->
+<!--   moderator = "vote_trump", -->
+<!--   moderator_levels = c(0, 1), -->
+<!--   group_labels = c("Biden Voters", "Trump Voters"), -->
+<!--   join_vars = c("category", "prepost", "vote_trump") -->
+<!-- ) -->
+<!-- ggsave("ordered_logit_sunflower.png", width = 8, height = 8) -->
+
+<!-- # create_combined_plot( -->
+<!-- #   plot_data = plot_burn, # must be list, -->
+<!-- #   predictions = predictions_burn, -->
+<!-- #   main_title = "Flag Burning", -->
+<!-- #   moderator = "vote_trump", -->
+<!-- #   moderator_levels = c(0, 1), -->
+<!-- #   group_labels = c("Biden Voters", "Trump Voters"), -->
+<!-- #   save_path = "burn.png", -->
+<!-- #   sunflower_params = list( -->
+<!-- #           sunflower_alpha = 0.25, -->
+<!-- #           sunflower_dodge = 0.5, -->
+<!-- #           sunflower_density = 60, -->
+<!-- #           sunflower_aspect_ratio = 0, -->
+<!-- #           sunflower_size = 0.01, -->
+<!-- #           errorbar_width = 0.05, -->
+<!-- #           category_labels = c("1" = "Strongly\nOppose", -->
+<!-- #                                               "2" = "Oppose", -->
+<!-- #                                               "3" = "Neutral", -->
+<!-- #                                               "4" = "Support", -->
+<!-- #                                               "5" = "Strongly\nSupport")))  -->
+
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+<!-- devtools::load_all() -->
+<!-- biden = plotSunflower(plot_recount$plotting_data |>  -->
+<!--                 mutate( -->
+<!--                   prepost_label = factor(prepost, levels = c(0, 1),  -->
+<!--                     labels = c("Pre-Election", "Post-Election")), -->
+<!--                   vote_trump_label = factor(vote_trump, levels = c(0, 1), -->
+<!--                     labels = c("Biden Voters", "Trump Voters"))) |> -->
+<!--              filter(vote_trump == 0),  -->
+<!--              plot_recount$observed_counts, -->
+<!--              sunflower_alpha = 0.25, -->
+<!--              sunflower_dodge = 0.65, -->
+<!--              sunflower_density = 60, -->
+<!--              sunflower_aspect_ratio = 7, -->
+<!--              sunflower_size = 0.01, -->
+<!--              errorbar_width = 0.05, -->
+<!--               title = "", -->
+<!--               subtitle = "Biden Voters", -->
+<!--               y_label = "Probability", -->
+<!--               x_label = "", -->
+<!--               legend_title = "") -->
+<!-- trump = plotSunflower(plot_recount$plotting_data |>   -->
+<!--                     mutate( -->
+<!--                     prepost_label = factor(prepost, levels = c(0, 1),  -->
+<!--                     labels = c("Pre-Election", "Post-Election")), -->
+<!--                     vote_trump_label = factor(vote_trump, levels = c(0, 1), -->
+<!--                     labels = c("Biden Voters", "Trump Voters"))) |> -->
+<!--                     filter(vote_trump == 1), -->
+<!--              plot_recount$observed_counts, -->
+<!--              sunflower_alpha = 0.25, -->
+<!--              sunflower_dodge = 0.65, -->
+<!--              sunflower_density = 60, -->
+<!--              sunflower_aspect_ratio = 7, -->
+<!--              sunflower_size = 0.01, -->
+<!--              errorbar_width = 0.05, -->
+<!--              title = "", -->
+<!--              subtitle = "Trump Voters", -->
+<!--              y_label = "Probability", -->
+<!--              x_label = "", -->
+<!--             legend_title = "") -->
+
+<!-- me = calculate_marginal_effect( -->
+<!--   predictions_recount,, -->
+<!--   focal_var = "prepost", -->
+<!--   focal_contrast = c(0, 1), -->
+<!--   moderator = "vote_trump" -->
+<!-- ) -->
+<!-- trump_margins = plotMarginalEffects(me |> filter(vote_trump == 1), -->
+<!--                                     point_size = 3, -->
+<!--                                     title = "", -->
+<!--                                     point_alpha = 0.5, -->
+<!--                                     y_label = "", -->
+<!--                                     x_label = "Marginal Effect") -->
+<!-- biden_margins = plotMarginalEffects(me |> filter(vote_trump == 0), -->
+<!--                                     point_size = 3, -->
+<!--                                     point_alpha = 0.5, -->
+<!--                                     title = "", -->
+<!--                                     y_label = "", -->
+<!--                                     x_label = "") -->
+
+<!-- biden_no_legend <- biden + theme(legend.position = "none") -->
+<!-- trump_no_legend <- trump -->
+
+<!-- library(patchwork) -->
+<!-- biden_no_legend + biden_margins+ -->
+<!-- trump_no_legend + trump_margins + -->
+<!--   plot_layout(widths = c(0.9, 1), -->
+<!--               heights = c(1, 1)) + -->
+<!--   plot_annotation(title = "Election Recounts") -->
+
+
+<!-- ggsave("ordered_logit_sunflower.png", width = 6, height = 5) -->
+<!-- ``` -->
+
+<!-- ### Dot Plots -->
+
+<!-- ## Simple Graph -->
+
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+
+<!-- # Create the plot -->
+<!-- summarize_predictions(predictions_march) |> -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")), -->
+<!--     category = factor(category) -->
+<!--   ) %>% -->
+<!--   ggplot(aes(x = prepost_label, y = mean_prob, color = category, group = category)) + -->
+<!--   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") + -->
+<!--   geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci), -->
+<!--                   position = position_dodge(width = 0.5), -->
+<!--                   size = 0.8, -->
+<!--                   linewidth = 1, -->
+<!--                   alpha = 0.5) + -->
+<!--   geom_line( position = position_dodge(width = 0.5)) +  -->
+<!--   facet_wrap(~vote_trump_label, ncol = 2) + -->
+<!--   labs( -->
+<!--     x = "", -->
+<!--     y = "Predicted Probability", -->
+<!--     color = "Response\nCategory", -->
+<!--     title = "Predicted Probabilities by Election Period and Vote Choice", -->
+<!--     subtitle = "Points show mean probability with 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     legend.position = "right", -->
+<!--     panel.grid.major.x = element_blank(), -->
+<!--     strip.text = element_text(size = 12, face = "bold") -->
+<!--   ) + -->
+<!--   scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1)) + -->
+<!-- scale_color_manual(values = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey", "4" = "darkslategrey", "5" = "black"), -->
+<!--  labels = c("1" = "Strongly Not Support", "2" = "Not Support", "3" = "Neutral", "4" = "Support", "5" = "Strongly Support")) -->
+
+
+<!-- ``` -->
+
+<!-- ```{r, warning = FALSE, message = FALSE, echo = TRUE} -->
+<!-- library(dplyr) -->
+
+<!-- me = calculate_marginal_effect( -->
+<!--   predictions, -->
+<!--   focal_var = "prepost", -->
+<!--   focal_contrast = c(0, 1), -->
+<!--   moderator = "vote_trump" -->
+<!-- )  -->
+<!-- print(me) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # devtools::load_all() -->
+<!-- trump_margins = plotMarginalEffects(me |> filter(vote_trump == 1)) -->
+<!-- biden_margins = plotMarginalEffects(me |> filter(vote_trump == 0)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- biden_no_legend <- biden + theme(legend.position = "none") -->
+<!-- trump_no_legend <- trump + theme(legend.position = "none") -->
+
+<!-- biden_no_legend + biden_margins+ -->
+<!-- trump_no_legend + trump_margins +  -->
+<!--   plot_layout(widths = c(0.3, 0.4), -->
+<!--               heights = c(1, 1)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+
+
+<!-- # 2. Plotting the marginal effects -->
+<!-- p <- ggplot(me |> filter(vote_trump == 0), aes(y = category, x = mean_effect)) + -->
+<!--   geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey", size = 0.5) + -->
+<!--   geom_errorbarh(aes(xmin = lower_ci, xmax = upper_ci),  -->
+<!--                  height = 0.05,  -->
+<!--                  color = "darkgrey") + -->
+<!--   geom_point(size = 5, color = "black", alpha = 0.5) +  -->
+<!--   labs( -->
+<!--     x = "Estimated Effect and Confidence Interval", -->
+<!--     y = "Category", -->
+<!--     title = "Marginal Effects (Biden Voters)" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     panel.grid.major.y = element_blank(),  -->
+<!--     panel.grid.minor.y = element_blank(), -->
+<!--     plot.title = element_text(hjust = 0.5) -->
+<!--   ) + -->
+<!--   scale_x_continuous(limits = c(-0.2, 0.2), breaks = seq(-0.2, 0.2, by = 0.1)) + -->
+<!--   scale_y_discrete( -->
+<!--     labels = c( -->
+<!--       "1" = "Strongly Not Support",  -->
+<!--       "2" = "Do Not Support",  -->
+<!--       "3" = "Neutral",  -->
+<!--       "4" = "Support",  -->
+<!--       "5" = "Strongly Support" -->
+<!--     ) -->
+<!--   ) -->
+
+<!-- # Print the plot -->
+<!-- print(p) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(vayr) -->
+<!-- library(dplyr) -->
+
+<!-- observed_counts <- sample_df %>% -->
+<!--   group_by(prepost, vote_trump, attend_march) %>% -->
+<!--   summarise(n = n(), .groups = "drop") %>% -->
+<!--   rename(category = attend_march) %>% -->
+<!--   mutate(category = factor(category)) |> -->
+<!--   filter(!is.na(vote_trump)) -->
+
+<!-- # Get predictions for joining -->
+<!-- pred_summary <- summarize_predictions(predictions) %>% -->
+<!--   mutate(category = factor(category)) -->
+
+<!-- plot_data <- sample_df %>% -->
+<!--   filter(!is.na(vote_trump)) %>% -->
+<!--   mutate(category = factor(attend_march)) %>% -->
+<!--   left_join(pred_summary %>% dplyr::select(prepost, vote_trump, category, mean_prob),  -->
+<!--             by = c("prepost" = "prepost", "vote_trump" = "vote_trump", "category" = "category")) %>% -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")) -->
+<!--   ) -->
+
+<!-- # Create the plot -->
+<!-- pred_summary %>% -->
+<!--   left_join(observed_counts, by = c("prepost", "vote_trump", "category")) %>% -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")) -->
+<!--   ) %>% -->
+<!--   ggplot(aes(x = prepost_label, y = mean_prob, color = category, group = category)) + -->
+<!--   # Sunflowers centered at predicted probabilities -->
+<!--   geom_point(data = plot_data,  -->
+<!--              aes(x = prepost_label, y = mean_prob, color = category), -->
+<!--              position = position_sunflowerdodge(width = 0.5, density = 50, aspect_ratio = 5), -->
+<!--              size = 0.2, alpha = 0.25, inherit.aes = FALSE) + -->
+<!--   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), -->
+<!--                 position = position_dodge(width = 0.5), -->
+<!--                 width = 0.1, linewidth = 0.8, alpha = 0.7) + -->
+<!--   geom_line(position = position_dodge(width = 0.5), linewidth = 1) +  -->
+<!--   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci, fill = category), -->
+<!--               position = position_dodge(width = 0.5), -->
+<!--               alpha = 0.2, color = NA)  +  -->
+<!--   facet_wrap(~vote_trump_label, ncol = 1) + -->
+<!--   labs( -->
+<!--     x = "", -->
+<!--     y = "Predicted Probability", -->
+<!--     color = "Response\nCategory", -->
+<!--     title = "Predicted Probabilities by Election Period and Vote Choice", -->
+<!--     subtitle = " Lines show change in predicted probabilities;\nSunflower plot corresponds to the relative proportion of respondents in that category;\nerror bars are 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     legend.position = "bottom", -->
+<!--     panel.grid.major.x = element_blank(), -->
+<!--     strip.text = element_text(size = 12, face = "bold") -->
+<!--   ) + -->
+<!--   scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1)) + -->
+<!--   scale_color_manual(values = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey", "4" = "darkslategrey", "5" = "black"), -->
+<!--  labels = c("1" = "Strongly Not Support", "2" = "Do Not Support", "3" = "Neutral", "4" = "Support", "5" = "Strongly Support")) -> points -->
+
+<!-- points -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(vayr) -->
+<!-- library(dplyr) -->
+
+<!-- observed_counts <- sample_df %>% -->
+<!--   group_by(prepost, vote_trump, attend_march) %>% -->
+<!--   summarise(n = n(), .groups = "drop") %>% -->
+<!--   rename(category = attend_march) %>% -->
+<!--   mutate(category = factor(category)) |> -->
+<!--   filter(!is.na(vote_trump)) -->
+
+<!-- pred_summary <- summarize_predictions(predictions) %>% -->
+<!--   mutate(category = factor(category)) -->
+
+<!-- expected_values_ci <- predictions %>% -->
+<!--   mutate(category_num = as.numeric(as.character(category))) %>% -->
+<!--   group_by(draw, prepost, vote_trump) %>% -->
+<!--   summarise(expected_value = sum(category_num * probability), .groups = "drop") %>% -->
+<!--   group_by(prepost, vote_trump) %>% -->
+<!--   summarise( -->
+<!--     mean_expected = mean(expected_value), -->
+<!--     lower_ci = quantile(expected_value, 0.025), -->
+<!--     upper_ci = quantile(expected_value, 0.975), -->
+<!--     .groups = "drop" -->
+<!--   ) %>% -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")) -->
+<!--   ) -->
+
+<!-- # View expected values with CI -->
+<!-- print(expected_values_ci) -->
+
+<!-- # Prepare raw data aligned with predicted probabilities -->
+<!-- plot_data <- sample_df %>% -->
+<!--   filter(!is.na(vote_trump)) %>% -->
+<!--   mutate(category = factor(attend_march)) %>% -->
+<!--   left_join(pred_summary %>% dplyr::select(prepost, vote_trump, category, mean_prob),  -->
+<!--             by = c("prepost" = "prepost", "vote_trump" = "vote_trump", "category" = "category")) %>% -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")) -->
+<!--   ) -->
+
+
+<!-- # Expected value plot WITH confidence intervals -->
+<!-- # Expected value plot with 1-5 scale and labeled points -->
+<!--  ggplot(expected_values_ci, aes(x = prepost_label, y = mean_expected,  -->
+<!--                                color = vote_trump_label, group = vote_trump_label)) + -->
+<!--   # Add midpoint reference line at 3 -->
+<!--   geom_hline(yintercept = 3, linetype = "dashed", color = "gray50", linewidth = 0.5) + -->
+<!--   # geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = vote_trump_label), -->
+<!--   #             alpha = 0.2, color = NA) + -->
+<!--   geom_line(linewidth = 0.5) + -->
+<!--   geom_point(size = 4, alpha = 0.3) + -->
+<!--   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), -->
+<!--                 width = 0.005, linewidth = 1) + -->
+<!--   labs( -->
+<!--     x = "", -->
+<!--     y = "Expected Support Level", -->
+<!--     color = "Vote Choice", -->
+<!--     fill = "Vote Choice", -->
+<!--     title = "Attend a March or Rally", -->
+<!--     subtitle = "Expected value = sum(category x probability) with 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     legend.position = "bottom", -->
+<!--     panel.grid.major.x = element_blank() -->
+<!--   ) + -->
+<!--   scale_y_continuous( -->
+<!--     limits = c(2, 4), -->
+<!--     breaks = 2:4, -->
+<!--     labels = c("2" = "Oppose",  -->
+<!--                "3" = "Neutral",  -->
+<!--                "4" = "Support") -->
+<!--   ) + -->
+<!--   scale_color_manual(values = c("Biden Voters" = "#457B9D", "Trump Voters" = "#E63946")) + -->
+<!--   scale_fill_manual(values = c("Biden Voters"  = "#457B9D", "Trump Voters" = "#E63946"))   -->
+<!-- ``` -->
+
+<!-- ## Marginal effects. -->
+
+<!-- Say are interest is in whether these changes are statistically significant at the conventional 0.05 level. We can use the `predict_logit_probs()` function to generate predicted probabilities from a binary logit model, and then summarize those predictions. -->
+
+<!-- This gives us the marginal effect of supporting attending a march, for Trump voters versus Biden voters, from pre- to post-election. The marginal effect is just the change from pre to post for each group. -->
+
+<!-- ```{r} -->
+<!-- library(patchwork) -->
+<!--   points + p +  -->
+<!--   plot_layout(widths = c(0.3, 0.4), -->
+<!--               heights = c(1, 0.5)) -->
+<!-- ``` -->

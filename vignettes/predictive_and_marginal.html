@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.42">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Christopher Weber">
+<meta name="dcterms.date" content="2025-12-08">
+
+<title>Causal Inference, Western Data</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="predictive_and_marginal_files/libs/clipboard/clipboard.min.js"></script>
+<script src="predictive_and_marginal_files/libs/quarto-html/quarto.js"></script>
+<script src="predictive_and_marginal_files/libs/quarto-html/popper.min.js"></script>
+<script src="predictive_and_marginal_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="predictive_and_marginal_files/libs/quarto-html/anchor.min.js"></script>
+<link href="predictive_and_marginal_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="predictive_and_marginal_files/libs/quarto-html/quarto-syntax-highlighting-2f5df379a58b258e96c21c0638c20c03.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="predictive_and_marginal_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="predictive_and_marginal_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="predictive_and_marginal_files/libs/bootstrap/bootstrap-c0367b04c37547644fece4185067e4a7.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Causal Inference, Western Data</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Christopher Weber </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">December 8, 2025</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>Several often ignored problems emerge in causal inference using observational data: (1) selection bias into the treatment, (2) heterogeneity in treatment effects across units, and (3) sampling methods that affect whether a unit is actually observed; what is the mechanism that determines whether a unit is selected into the sample? Selection bias reflects the <em>fundamental problem of causal inference</em> in that we are unable to observe a unit in both <em>treatment</em> and <em>control</em> conditions. While this problem extends to randomized experiments, population averaged effects can be reliably estimated because – unlike observational data – knowledge of the treatment assignment assignment allows for the accurate estimation of average treatment effects. For observational data, population averaged effects may be confounded by unobserved variables that influence both treatment assignment and outcome, <span class="math inline">\(y\)</span>.</p>
+<p>If there exists heterogeneity in treatment effects across units, a single estimated treatment effect may not accurately reflect differences across subpopulations. In our case, interest is in estimating the change from <em>pre-election</em> period to <em>post-election</em> on support for electoral contestation behaviors, <span class="math inline">\(y\)</span>. The average treatment effect is the average difference in <span class="math inline">\(y\)</span> between the <em>post-election</em> and <em>pre-election</em> periods,</p>
+<p><span id="eq-ate"><span class="math display">\[
+\text{ATE} = \mathbb{E}[Y_i(1)] - \mathbb{E}[Y_i(0)]
+\tag{1}\]</span></span></p>
+<p>However, if treatment effects vary across subpopulations – say Trump voters versus Biden voters and/or something else – the average treatment effect within each subgroup differs. Let <span class="math inline">\(j\)</span> index these groups (e.g., <span class="math inline">\(j = 1\)</span> for Trump, <span class="math inline">\(j = 0\)</span> for Biden)</p>
+<p><span id="eq-catej"><span class="math display">\[
+\text{ATE}_{j} = \mathbb{E}[Y_{ij}(1)] - \mathbb{E}[Y_{ij}(0)]
+\tag{2}\]</span></span></p>
+<p>If the treatment effect across different subgroups, the <em>conditional average treatment effect</em> (CATE), the <em>average treatment effect</em> (ATE) is simply the average weighted by frequency effects for the subgroup.s When the distance between <strong>?@eq-cate</strong> and <strong>?@eq-atej</strong> increases – that is, heterogeneity; a considerable difference in treatment effects, a “winner-loser” effect – <a href="#eq-ate" class="quarto-xref">Equation&nbsp;1</a> does not accurately capture treatment effects.</p>
+<p>The third issue, population inference requires knowledge of how the sample units were collected. When units are sampled proportional to that of the broader population, one can adjust for sampling error. Sampling weights are used to readjust for imbalances brought about by random sampling or non-random sampling designs.</p>
+</section>
+<section id="relevance-to-the-western-states-data" class="level2">
+<h2 class="anchored" data-anchor-id="relevance-to-the-western-states-data">Relevance to the Western States Data</h2>
+<ul>
+<li><ol type="I">
+<li>seems relevant to our data, particularly 2020 election data, because treatment assignment – exposure to <em>pre-election</em> versus <em>post-election</em> period – may be confounded by unobserved variables that also affect support for electoral contestation behavior. We have imbalanced exposure to <em>pre</em> and <em>post periods</em>, which may be correlated to unobserved factors. In this case, the assignment mechanism is not entirely random. It’s not clear what contributed to being observed in the <em>pre</em> or <em>post</em> election period. We adjusted for this by <em>g-estimation</em> and <em>inverse probability weighting</em>. This is a bit more challenging for me to piece together with categorical data, so I estimated models using Bayesiam models to piece this together.</li>
+</ol></li>
+<li><ol start="2" type="1">
+<li>is also relevant, because treatment effects vary across subpopulations – particularly vote choice – which is a winner and loser effect. Even when controlling for this, there is still heterogeneity within Trump voters, indicating that not all Trump voters respond the same way to the loss.</li>
+</ol></li>
+<li><ol start="3" type="1">
+<li>is also relevant, because our data are imbalanced (we have an oversample of latinos), and data are only observed in five western states.</li>
+</ol></li>
+</ul>
+</section>
+<section id="model-estimation" class="level2">
+<h2 class="anchored" data-anchor-id="model-estimation">Model Estimation</h2>
+<p>I started with an ordered logit model in <code>R</code>, from the <code>brms</code> package. Data are analyzed comparing <strong>pre</strong> v. <strong>post</strong> election, to see if support for electoral contestation behavior (here, attending a march) change – for Trump voters versus Biden voters. This is specified to examine whether support for contestation varies depending upon electoral functions; a <strong>winner-loser effect</strong>.</p>
+<p>First, let’s recode the data, then estimate the model in <code>brms</code>. The model without covariates.</p>
+<p>The counterfactual for each respondent is not observable – what <em>would</em> happen to those assigned to the post-election if they were instead assigned to the pre-election and vice-versa. So, what I do is first, estimate the model. Then, create two versions of the data; each dataset can be thought of as a population. In one version, the data is simply the observed data, in the second version, the pre-post variable is flipped for everyone. So, in the second dataset, everyone who was in the pre-election is put in the pre-election and those in the post-election are recoded as post-election. Then, I pass these datasets to the models – which too are distributions, the posterior distributions of the parameters – to generate predictions. From here, the different posterior predictive values constitute <em>what-if</em> scenarios – e.g.&nbsp;everyone in the dataset is and it’s then fairly simple to calculate different treatment effects. Together these are the steps involved in the <em>g-computation</em> framework which we’ve been using. It involves fitting a model to the observed data – the ordered or multinomial logit or linear regression – and then simulating potential outcomes where every individual is in every treatment condition.</p>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>observed_data <span class="ot">&lt;-</span> recode_data <span class="sc">%&gt;%</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">pre_condition =</span> <span class="st">"actual_treatment"</span>,</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">respondent_id =</span> <span class="fu">row_number</span>(),</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">original_prepost =</span> prepost  <span class="co"># Keep original</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>counterfactual_data <span class="ot">&lt;-</span> recode_data <span class="sc">%&gt;%</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">pre_condition =</span> <span class="st">"hypothetical_treatment"</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">respondent_id =</span> <span class="fu">row_number</span>(),</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">original_prepost =</span> prepost,  <span class="co"># Keep original</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">prepost =</span> <span class="dv">1</span> <span class="sc">-</span> prepost</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>full_counterfactual_set <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(observed_data, counterfactual_data)</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>preds_draws <span class="ot">&lt;-</span> attend_march <span class="sc">%&gt;%</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_epred_draws</span>(</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">newdata =</span> full_counterfactual_set, </span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">ndraws =</span> <span class="dv">500</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>By setting it up in this way – creating a copy of the dataset where pre and post are flipped – the treatment effect for every respondent can be calculated (over many simulated draws from the posterior distribution). From here, I can then calculated different types of treatment effects – average treatment effects and conditional average treatment effects.</p>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-7-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="imbalance" class="level2">
+<h2 class="anchored" data-anchor-id="imbalance">Imbalance</h2>
+<p>Inclusion into the survey is partially known because we have an oversample of Latino voters…So I thought I’d include additional covariates, which we can similarly average across…</p>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-11-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="heterogeneous-effects" class="level2">
+<h2 class="anchored" data-anchor-id="heterogeneous-effects">Heterogeneous Effects</h2>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-14-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="question-wording-effects" class="level2">
+<h2 class="anchored" data-anchor-id="question-wording-effects">Question Wording Effects</h2>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>preds_draws <span class="ot">&lt;-</span> attend_march <span class="sc">%&gt;%</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">add_epred_draws</span>(</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">newdata =</span> full_counterfactual_set, </span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">ndraws =</span> <span class="dv">500</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-17-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="other-item-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="other-item-analysis">Other Item Analysis</h2>
+<p>The remaining items – flag burning, court challenges, election recounts, criticizing the election – are:</p>
+<section id="flag-burning" class="level3">
+<h3 class="anchored" data-anchor-id="flag-burning">Flag Burning</h3>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-19-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="ballot-recounts" class="level3">
+<h3 class="anchored" data-anchor-id="ballot-recounts">Ballot Recounts</h3>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-21-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="criticize-eleciton" class="level3">
+<h3 class="anchored" data-anchor-id="criticize-eleciton">Criticize Eleciton</h3>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-23-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="contest-election-in-court" class="level3">
+<h3 class="anchored" data-anchor-id="contest-election-in-court">Contest Election in Court</h3>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-25-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="average-contestation-scores" class="level2">
+<h2 class="anchored" data-anchor-id="average-contestation-scores">Average Contestation Scores</h2>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="predictive_and_marginal_files/figure-html/unnamed-chunk-28-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="768"></p>
+</figure>
+</div>
+</div>
+</div>
+<!-- ### Plot Options -->
+<!-- ```{r} -->
+<!-- attend_march = brm(attend_march ~ prepost*vote_trump,  -->
+<!--                data = recode_data, -->
+<!--                family = cumulative("logit"), -->
+<!--                cores = 10, -->
+<!--                iter = 2000, -->
+<!--                chains = 1) -->
+<!-- D_matrix = expand_grid( -->
+<!--   prepost = c(0, 1), -->
+<!--   vote_trump = c(0, 1) -->
+<!-- )  -->
+<!-- predictive_effects_summary( -->
+<!--   model = attend_march, -->
+<!--   predictor_grid = D_matrix, -->
+<!--   group_vars = c("prepost", "vote_trump") -->
+<!-- ) -> predictive_effects_summary -->
+<!-- ``` -->
+<!-- # Construct Marginal Effects -->
+<!-- The above functions, datasets are trivial to construct. Marginal effects are a little more complicated. Here's how I accomplished this.I construct the marginal effect as follows: -->
+<!-- -   Construct a design matrix -- generate predictions when `prepost` $\in 0,1$ and `vote_trump` $\in 0,1$. -->
+<!-- -   Pivot the data to wide and construct the differences, the marginal effects. -->
+<!-- -   Pivot back to long so that we can summarize the data. -->
+<!-- -   Generate mean marginal effects, for each category, when comparing `prepost` = 1 versus `prepost` = 0, for each level of `vote_trump`. -->
+<!-- Below is a hardcoded version that only works with 3 category data and the `prepost` variable as the contrast, and `vote_trump` as the moderator. This is followed with a generic function which does the same thing, which I'll use in a moment. -->
+<!-- ```{r} -->
+<!-- library(brms) -->
+<!-- library(tidybayes) -->
+<!-- D_matrix = expand_grid( -->
+<!--   prepost = c(0, 1), -->
+<!--   vote_trump = c(0, 1) -->
+<!-- )  -->
+<!-- ## Construct Marginal Effects   -->
+<!-- D_matrix |>  -->
+<!-- add_epred_draws(attend_march) |>  -->
+<!--   pivot_wider( -->
+<!--     names_from = .category, -->
+<!--     values_from = .epred, -->
+<!--     names_prefix = "prob_" -->
+<!--   ) |>  -->
+<!--   ungroup() |> -->
+<!--  dplyr::select(-c(.row, .chain, .iteration)) |>  -->
+<!-- pivot_wider( -->
+<!--     names_from = prepost, -->
+<!--     values_from = starts_with("prob_"), -->
+<!--     names_sep = "_" -->
+<!--   ) |> -->
+<!--   mutate( -->
+<!--     marginal_effect_1 = prob_1_1 - prob_1_0, -->
+<!--     marginal_effect_2 = prob_2_1 - prob_2_0, -->
+<!--     marginal_effect_3 = prob_3_1 - prob_3_0 -->
+<!--   ) |> -->
+<!--   dplyr::select(vote_trump, .draw, starts_with("marginal_effect")) %>% -->
+<!--   ungroup() %>% -->
+<!--   group_by(vote_trump) %>% -->
+<!--   summarise( -->
+<!--     mean1 = mean(marginal_effect_1), -->
+<!--     sd1 = sd(marginal_effect_1), -->
+<!--     lower1 = quantile(marginal_effect_1, 0.025), -->
+<!--     upper1 = quantile(marginal_effect_1, 0.975), -->
+<!--     mean2 = mean(marginal_effect_2), -->
+<!--     sd2 = sd(marginal_effect_2), -->
+<!--     lower2 = quantile(marginal_effect_2, 0.025), -->
+<!--     upper2 = quantile(marginal_effect_2, 0.975), -->
+<!--     mean3 = mean(marginal_effect_3), -->
+<!--     sd3 = sd(marginal_effect_3), -->
+<!--     lower3 = quantile(marginal_effect_3, 0.025), -->
+<!--     upper3 = quantile(marginal_effect_3, 0.975), -->
+<!--     .groups = "drop" -->
+<!--   ) |> -->
+<!-- pivot_longer( -->
+<!--   cols = -vote_trump, -->
+<!--   names_to = c(".value", "category"), -->
+<!--   names_pattern = "(.+)(\\d)$" -->
+<!-- ) -> marginal_effect -->
+<!-- ``` -->
+<!-- ## Generalized Function -->
+<!-- The above function is hardcoded to work with `prepost` as the contrast variable, and `vote_trump` as the moderator, with three categories. Let's make it more generalizable -->
+<!-- ```{r} -->
+<!-- marginal_effects_summary <- calculate_marginal_effects( -->
+<!--      model = attend_march,  -->
+<!--      contrast_var = prepost,  -->
+<!--      contrast_vals = c(0, 1),  -->
+<!--      moderators = tibble(vote_trump = c(0, 1)) -->
+<!--  ) -->
+<!-- head(marginal_effects_summary) -->
+<!-- ``` -->
+<!-- The three dataframes, `observed_counts`, `predictive_effects_summary`, and `marginal_effects_summary` are now ready for plotting. \## This is how it should look. -->
+<!-- The margins for the plot are generated with `observed_counts`, whereas the dot-lines are generated with `predictive_effects_summary`. This constitutes the left panel of the plot. The right panel is generated from `marginal_effects_summary`. -->
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+<!-- library(vayr) -->
+<!-- ggplot(aes(x = factor(prepost, labels = c("Pre Election", "Post Election")), y = mean, color = .category, group = .category), -->
+<!--        data = predictive_effects_summary) + -->
+<!--   geom_point(size = 3, alpha = 0.35) + -->
+<!--   geom_errorbar(aes(ymin = lower, ymax = upper), -->
+<!--                 width = 0.01, linewidth = 0.9, alpha = 0.5) + -->
+<!--   facet_wrap(~ factor(vote_trump, labels = c("Biden", "Trump")), ncol = 1) + -->
+<!--   geom_line() +  -->
+<!--   theme_minimal() + -->
+<!--     labs( -->
+<!--     x = "", -->
+<!--     y = "Predicted Probability", -->
+<!--     color = "Response\nCategory", -->
+<!--     title = "Predicted Probabilities", -->
+<!--     subtitle = "" -->
+<!--   ) + -->
+<!--     scale_y_continuous(limits = c(0, 0.8), breaks = seq(0, 1, 0.2)) + -->
+<!--     theme_minimal(base_size = 12, base_family = "sans") + -->
+<!--     theme( -->
+<!--         plot.title = element_text(size = 12, face = "bold", margin = margin(b = 5)), -->
+<!--         plot.subtitle = element_text(size = 10, color = "gray40", margin = margin(b = 15)), -->
+<!--         panel.grid.major.x = element_blank(), -->
+<!--         panel.grid.minor = element_blank(), -->
+<!--         panel.grid.major.y = element_line(color = "gray95", size = 0.3), -->
+<!--         strip.text = element_text(size = 12, face = "bold", color = "gray20"), -->
+<!--         strip.background = element_rect(fill = "gray95", color = "white"), -->
+<!--         axis.text = element_text(size = 10, color = "gray30"), -->
+<!--         axis.title = element_text(size = 11, color = "gray20", face = "bold"), -->
+<!--         legend.position = "bottom", -->
+<!--         legend.text = element_text(size = 10), -->
+<!--         plot.margin = margin(20, 20, 20, 20) -->
+<!--     ) + -->
+<!--   scale_color_manual(values = c("1" = "black", "2" = "grey", "3" = "lightgrey"), -->
+<!--                      labels = c("1" = "Oppose", "2" = "Neutral", "3" = "Support")) -> predictive_effects -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- marginal_effects_summary %>% -->
+<!--   ggplot(aes(x = .category, y = mean, color = factor(vote_trump))) + -->
+<!--   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50", size = 0.8) + -->
+<!--   geom_point(size = 2, position = position_dodge(width = 0.3)) + -->
+<!--   geom_errorbar(aes(ymin = lower, ymax = upper), -->
+<!--                 width = 0.15, size = 1,  -->
+<!--                 position = position_dodge(width = 0.3), alpha = 0.4) + -->
+<!--   scale_x_discrete(labels = c("1" = "Oppose",  -->
+<!--                               "2" = "Neutral",  -->
+<!--                               "3" = "Support")) + -->
+<!--   scale_color_manual(name = "Vote Choice", -->
+<!--                      values = c("0" = "black", "1" = "grey"), -->
+<!--                      labels = c("0" = "Biden", "1" = "Trump")) + -->
+<!--   labs( -->
+<!--     x = "Response Category", -->
+<!--     y = "Marginal Effect (Post - Pre)", -->
+<!--     title = "Marginal Effects", -->
+<!--     subtitle = "Error bars are 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal(base_size = 12) + -->
+<!--     theme( -->
+<!--         plot.title = element_text(size = 12, face = "bold", margin = margin(b = 5)), -->
+<!--         plot.subtitle = element_text(size = 10, color = "gray40", margin = margin(b = 15)), -->
+<!--         panel.grid.major.x = element_blank(), -->
+<!--         panel.grid.minor = element_blank(), -->
+<!--         panel.grid.major.y = element_line(color = "gray95", size = 0.3), -->
+<!--         strip.text = element_text(size = 12, face = "bold", color = "gray20"), -->
+<!--         strip.background = element_rect(fill = "gray95", color = "white"), -->
+<!--         axis.text = element_text(size = 10, color = "gray30"), -->
+<!--         axis.title = element_text(size = 11, color = "gray20", face = "bold"), -->
+<!--         legend.position = "bottom", -->
+<!--         legend.text = element_text(size = 10), -->
+<!--         plot.margin = margin(20, 20, 20, 20) -->
+<!--     ) + -->
+<!--   coord_flip() -> marginal_effects -->
+<!-- ``` -->
+<!-- ```{r, fig.width=10, fig.height=6} -->
+<!-- library(patchwork) -->
+<!-- predictive_effects + marginal_effects +  -->
+<!--   plot_layout(widths = c(0.3, 0.5), -->
+<!--               heights = c(1, 0.5)) + -->
+<!-- plot_annotation( -->
+<!--   title = "Attending a March or Rally", -->
+<!--   subtitle = "Predicted probabilities and marginal effects by vote choice", -->
+<!--   caption = "Source: Western States Survey 2020. N = 2,000 respondents.", -->
+<!--   theme = theme( -->
+<!--     plot.title = element_text(size = 16, face = "bold", hjust = 0), -->
+<!--     plot.subtitle = element_text(size = 12, color = "gray40", hjust = 0, margin = margin(t = 5)), -->
+<!--     plot.caption = element_text(size = 10, color = "gray60", hjust = 1) -->
+<!--   ) -->
+<!-- ) -->
+<!-- ``` -->
+<!-- From the *pre* to *post* period, Trump voters increased their support for attending a march or rally by about 10 points ($\Delta_y = 0.971, SD = 0.024, 95% \text{Credible Interval} = 0.0520, 0.147)$). Biden voters show the opposite pattern, decreasing their support by about 5 points ($\Delta_y = -0.0612, SD = 0.0246, 95% \text{Credible Interval} = -0.109, -0.002$). -->
+<!-- ## Counterfactual Estimation -->
+<!-- In the previous iteration of our paper, we used structural *G*-estimation to compute counterfactuals. The logic is to (1) estimate the treatment model -- here exposure to *pre* or *post* election -- as a function of covariates, (2) use the treatment model to generate predicted probabilities of treatment assignment, (3) create a counterfactual dataset where the treatment is inverted for all respondents, and (4) generate predicted values from the outcome model for both the observed and counterfactual datasets. The difference between the two is the average treatment effect. Here's a similar approach using Bayesian estimation. -->
+<!-- ```{r} -->
+<!-- library(dplyr) -->
+<!-- ## Fit Model -->
+<!-- attend_march = brm(attend_march ~ prepost*vote_trump + female + age +  -->
+<!--                      libcon + authoritarianism + faminc + college  ,  -->
+<!--                data = recode_data, -->
+<!--                family = cumulative("logit"), -->
+<!--                cores = 10, -->
+<!--                iter = 2000, -->
+<!--                chains = 1) -->
+<!-- # Generate two copies of data, one observed, one counterfactual -->
+<!-- # Observed Condition:  -->
+<!-- observed_data <- recode_data %>% -->
+<!--   mutate(pre_condition = "actual_treatment") -->
+<!-- # Counterfactual Condition: If you voted -->
+<!-- counterfactual_data <- recode_data %>% -->
+<!--   mutate( -->
+<!--     pre_condition = "hypothetical_treatment", -->
+<!--     prepost = 1 - prepost # Flips 0 to 1, and 1 to 0 for everyone -->
+<!--   ) -->
+<!-- # Combine them into a single data frame for prediction -->
+<!-- full_counterfactual_set <- bind_rows(observed_data, counterfactual_data) -->
+<!-- ``` -->
+<!-- ## Two Scenarios -->
+<!-- I've created two copies of the same data -- one where `prepost` is observed, and one where `prepost` is flipped for everyone, the counterfactual. Now we can generate predicted values for both scenarios at the individual level. -->
+<!-- ```{r} -->
+<!-- individual_preds <- fitted( -->
+<!--   attend_march,  -->
+<!--   newdata = full_counterfactual_set, -->
+<!--   summary = FALSE  -->
+<!-- ) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- # Example of how you might aggregate the individual effects  -->
+<!-- # (requires advanced data wrangling beyond base matrix manipulation) -->
+<!-- library(tidybayes) -->
+<!-- # Use posterior_epred_draws to get the expected outcome for each draw/person/condition -->
+<!-- preds_draws <- attend_march %>% -->
+<!--   add_epred_draws( -->
+<!--     newdata = full_counterfactual_set,  -->
+<!--     re_formula = NA # Optional: Ignores group-level effects if you have them -->
+<!--   ) -->
+<!-- # Separate the observed and counterfactual predictions using the 'condition' column -->
+<!-- individual_effects <- preds_draws %>% -->
+<!--   ungroup() %>% -->
+<!--   select(.draw, id_column, condition, .epred) %>% # You'll need an 'id_column' in your original data -->
+<!--   spread(condition, .epred) %>% -->
+<!--   mutate(individual_effect = actual_vote - hypothetical_vote) -->
+<!-- # Summarize the average effect across all individuals -->
+<!-- average_counterfactual_effect <- individual_effects %>% -->
+<!--   summarise( -->
+<!--     mean_ate = mean(individual_effect), -->
+<!--     lower_ci = quantile(individual_effect, 0.025), -->
+<!--     upper_ci = quantile(individual_effect, 0.975) -->
+<!--   ) -->
+<!-- print(average_counterfactual_effect) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- # Expected value plot with 1-5 scale and labeled points -->
+<!--  ggplot(marginal_effects_summary, aes(x = prepost_label, y = mean,  -->
+<!--                                color = vote_trump_label, group = vote_trump_label)) + -->
+<!--   # Add midpoint reference line at 3 -->
+<!--   geom_hline(yintercept = 3, linetype = "dashed", color = "gray50", linewidth = 0.5) + -->
+<!--   # geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = vote_trump_label), -->
+<!--   #             alpha = 0.2, color = NA) + -->
+<!--   geom_line(linewidth = 0.5) + -->
+<!--   geom_point(size = 4, alpha = 0.3) + -->
+<!--   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), -->
+<!--                 width = 0.005, linewidth = 1) + -->
+<!--   labs( -->
+<!--     x = "", -->
+<!--     y = "Expected Support Level", -->
+<!--     color = "Vote Choice", -->
+<!--     fill = "Vote Choice", -->
+<!--     title = "Attend a March or Rally", -->
+<!--     subtitle = "Expected value = sum(category x probability) with 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     legend.position = "bottom", -->
+<!--     panel.grid.major.x = element_blank() -->
+<!--   ) + -->
+<!--   scale_y_continuous( -->
+<!--     limits = c(2, 4), -->
+<!--     breaks = 2:4, -->
+<!--     labels = c("2" = "Oppose",  -->
+<!--                "3" = "Neutral",  -->
+<!--                "4" = "Support") -->
+<!-- ``` -->
+<!-- The Pre/Post comparisons can be presented like this, -->
+<!-- ```{r} -->
+<!-- plotDots(plot_burn$plotting_data |> -->
+<!--           filter(vote_trump == 0),  -->
+<!--           y_var = "mean_prob", -->
+<!--           color_var = "prepost", -->
+<!--           x_var = "category", -->
+<!--           color_levels = c(0, 1), -->
+<!--           color_labels = c("Pre", "Post"), -->
+<!--           color_values = c("grey", "black"), -->
+<!--           title = "Flag Burning", -->
+<!--           category_levels = c("1", "2", "3"), -->
+<!--           category_labels = c("Disagree", "Neither","Agree")) -->
+<!-- ``` -->
+<!-- Or like this, -->
+<!-- ```{r} -->
+<!-- library(dplyr) -->
+<!-- plotSunflowerDots( -->
+<!--   list( -->
+<!--     plotting_data = plot_burn$plotting_data |> filter(vote_trump == 1), -->
+<!--     observed_counts = plot_burn$observed_counts |> filter(vote_trump == 1) -->
+<!--   ), -->
+<!--   join_vars = c("category", "prepost"), -->
+<!--   color_levels = c(1, 0), -->
+<!--   color_labels = c("Post", "Pre"), -->
+<!--   color_values = c("grey", "black"), -->
+<!--   title = "Flag Burning\nTrump Voters", -->
+<!--   x_label = "", -->
+<!--   y_label = "Predicted Probability", -->
+<!--   mean_point_size = 2, -->
+<!--   mean_point_alpha = 0.1, -->
+<!--   sunflower_size = 0.15, -->
+<!--   sunflower_alpha = 0.3, -->
+<!--   y_limits = c(0, 0.6), -->
+<!--   dodge_width = 0.65, -->
+<!--   sunflower_density = 50, -->
+<!--   sunflower_aspect_ratio = 10, -->
+<!-- ) -->
+<!-- # Test example for create_combined_sunflower -->
+<!-- create_combined_sunflower( -->
+<!--   plot_data = plot_burn, -->
+<!--   predictions = predictions_burn, -->
+<!--   main_title = "Flag Burning", -->
+<!--   subtitle = "Comparing Biden and Trump Voters Before and After the 2020 Election", -->
+<!--   caption = "Source: Western States Survey 2020. Lines connect conditions. N = 2,000 respondents.", -->
+<!--   moderator = "vote_trump", -->
+<!--   moderator_levels = c(0, 1), -->
+<!--   group_labels = c("Biden Voters", "Trump Voters"), -->
+<!--   category_levels = c("1", "2", "3", "4", "5"), -->
+<!--   category_labels = c("Strongly Oppose", "Oppose", "Neutral", "Support", "Strongly Support"), -->
+<!--   x_var = "prepost_label", -->
+<!--   join_vars = c("prepost", "category", "vote_trump"), -->
+<!--   focal_var = "prepost", -->
+<!--   focal_contrast = c(0, 1), -->
+<!--   colors = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey",  -->
+<!--             "4" = "darkslategrey", "5" = "black"), -->
+<!--   sunflower_params = list( -->
+<!--     sunflower_size = 0.15, -->
+<!--     sunflower_alpha = 0.3, -->
+<!--     errorbar_width = 0.1, -->
+<!--     errorbar_linewidth = 0.8, -->
+<!--     line_linewidth = 1, -->
+<!--     dodge_width = 0.65, -->
+<!--     sunflower_density = 50, -->
+<!--     sunflower_aspect_ratio = 10, -->
+<!--     y_limits = c(0, 0.6), -->
+<!--     y_breaks = seq(0, 0.6, 0.1) -->
+<!--   ), -->
+<!--   marginal_params = list( -->
+<!--     point_size = 2, -->
+<!--     point_alpha = 0.8, -->
+<!--     show_errorbar = TRUE, -->
+<!--     errorbar_width = 0.2, -->
+<!--     reference_line = 0, -->
+<!--     y_limits = c(-0.3, 0.3) -->
+<!--   ) -->
+<!-- ) -->
+<!-- ``` -->
+<!-- Or like this, -->
+<!-- ```{r} -->
+<!-- devtools::load_all() -->
+<!-- library(ggplot2) -->
+<!-- # Plot Trump voters -->
+<!-- plot_dat_labeled <- plot_burn$plotting_data %>% -->
+<!--     mutate( -->
+<!--     prepost_label = factor(prepost, levels = c(0, 1),  -->
+<!--                            labels = c("Pre-Election", "Post-Election")) -->
+<!--     ) |>  -->
+<!--   filter(vote_trump == 1)  -->
+<!-- plotSunflower( -->
+<!--     pred_summary = plot_dat_labeled, -->
+<!--     observed_counts = plot_burn$observed_counts |> filter(!is.na(vote_trump)) |> filter(vote_trump == 1), -->
+<!--     x_var = "prepost_label", -->
+<!--     join_vars = c("prepost", "vote_trump", "category"), -->
+<!--     title = "Trump Voters" -->
+<!-- ) -->
+<!-- ``` -->
+<!-- The information is identical, just conveyed in slighty different ways. -->
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+<!-- create_combined_plot( -->
+<!--   plot_data = plot_burn, -->
+<!--   predictions = predictions_burn, -->
+<!--   main_title = "Flag Burning", -->
+<!--   subtitle = "Comparing Biden and Trump Voters Before and After the 2020 Election", -->
+<!--   caption = "Source: Western States Survey 2020. Error bars show 95% credible intervals. N = 2,000 respondents.", -->
+<!--   moderator = "vote_trump", -->
+<!--   moderator_levels = c(0, 1), -->
+<!--   group_labels = c("Biden Voters", "Trump Voters"), -->
+<!--   join_vars = c("category", "prepost", "vote_trump") -->
+<!-- ) -->
+<!-- ggsave("ordered_logit_sunflower.png", width = 8, height = 8) -->
+<!-- # create_combined_plot( -->
+<!-- #   plot_data = plot_burn, # must be list, -->
+<!-- #   predictions = predictions_burn, -->
+<!-- #   main_title = "Flag Burning", -->
+<!-- #   moderator = "vote_trump", -->
+<!-- #   moderator_levels = c(0, 1), -->
+<!-- #   group_labels = c("Biden Voters", "Trump Voters"), -->
+<!-- #   save_path = "burn.png", -->
+<!-- #   sunflower_params = list( -->
+<!-- #           sunflower_alpha = 0.25, -->
+<!-- #           sunflower_dodge = 0.5, -->
+<!-- #           sunflower_density = 60, -->
+<!-- #           sunflower_aspect_ratio = 0, -->
+<!-- #           sunflower_size = 0.01, -->
+<!-- #           errorbar_width = 0.05, -->
+<!-- #           category_labels = c("1" = "Strongly\nOppose", -->
+<!-- #                                               "2" = "Oppose", -->
+<!-- #                                               "3" = "Neutral", -->
+<!-- #                                               "4" = "Support", -->
+<!-- #                                               "5" = "Strongly\nSupport")))  -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+<!-- devtools::load_all() -->
+<!-- biden = plotSunflower(plot_recount$plotting_data |>  -->
+<!--                 mutate( -->
+<!--                   prepost_label = factor(prepost, levels = c(0, 1),  -->
+<!--                     labels = c("Pre-Election", "Post-Election")), -->
+<!--                   vote_trump_label = factor(vote_trump, levels = c(0, 1), -->
+<!--                     labels = c("Biden Voters", "Trump Voters"))) |> -->
+<!--              filter(vote_trump == 0),  -->
+<!--              plot_recount$observed_counts, -->
+<!--              sunflower_alpha = 0.25, -->
+<!--              sunflower_dodge = 0.65, -->
+<!--              sunflower_density = 60, -->
+<!--              sunflower_aspect_ratio = 7, -->
+<!--              sunflower_size = 0.01, -->
+<!--              errorbar_width = 0.05, -->
+<!--               title = "", -->
+<!--               subtitle = "Biden Voters", -->
+<!--               y_label = "Probability", -->
+<!--               x_label = "", -->
+<!--               legend_title = "") -->
+<!-- trump = plotSunflower(plot_recount$plotting_data |>   -->
+<!--                     mutate( -->
+<!--                     prepost_label = factor(prepost, levels = c(0, 1),  -->
+<!--                     labels = c("Pre-Election", "Post-Election")), -->
+<!--                     vote_trump_label = factor(vote_trump, levels = c(0, 1), -->
+<!--                     labels = c("Biden Voters", "Trump Voters"))) |> -->
+<!--                     filter(vote_trump == 1), -->
+<!--              plot_recount$observed_counts, -->
+<!--              sunflower_alpha = 0.25, -->
+<!--              sunflower_dodge = 0.65, -->
+<!--              sunflower_density = 60, -->
+<!--              sunflower_aspect_ratio = 7, -->
+<!--              sunflower_size = 0.01, -->
+<!--              errorbar_width = 0.05, -->
+<!--              title = "", -->
+<!--              subtitle = "Trump Voters", -->
+<!--              y_label = "Probability", -->
+<!--              x_label = "", -->
+<!--             legend_title = "") -->
+<!-- me = calculate_marginal_effect( -->
+<!--   predictions_recount,, -->
+<!--   focal_var = "prepost", -->
+<!--   focal_contrast = c(0, 1), -->
+<!--   moderator = "vote_trump" -->
+<!-- ) -->
+<!-- trump_margins = plotMarginalEffects(me |> filter(vote_trump == 1), -->
+<!--                                     point_size = 3, -->
+<!--                                     title = "", -->
+<!--                                     point_alpha = 0.5, -->
+<!--                                     y_label = "", -->
+<!--                                     x_label = "Marginal Effect") -->
+<!-- biden_margins = plotMarginalEffects(me |> filter(vote_trump == 0), -->
+<!--                                     point_size = 3, -->
+<!--                                     point_alpha = 0.5, -->
+<!--                                     title = "", -->
+<!--                                     y_label = "", -->
+<!--                                     x_label = "") -->
+<!-- biden_no_legend <- biden + theme(legend.position = "none") -->
+<!-- trump_no_legend <- trump -->
+<!-- library(patchwork) -->
+<!-- biden_no_legend + biden_margins+ -->
+<!-- trump_no_legend + trump_margins + -->
+<!--   plot_layout(widths = c(0.9, 1), -->
+<!--               heights = c(1, 1)) + -->
+<!--   plot_annotation(title = "Election Recounts") -->
+<!-- ggsave("ordered_logit_sunflower.png", width = 6, height = 5) -->
+<!-- ``` -->
+<!-- ### Dot Plots -->
+<!-- ## Simple Graph -->
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+<!-- # Create the plot -->
+<!-- summarize_predictions(predictions_march) |> -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")), -->
+<!--     category = factor(category) -->
+<!--   ) %>% -->
+<!--   ggplot(aes(x = prepost_label, y = mean_prob, color = category, group = category)) + -->
+<!--   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") + -->
+<!--   geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci), -->
+<!--                   position = position_dodge(width = 0.5), -->
+<!--                   size = 0.8, -->
+<!--                   linewidth = 1, -->
+<!--                   alpha = 0.5) + -->
+<!--   geom_line( position = position_dodge(width = 0.5)) +  -->
+<!--   facet_wrap(~vote_trump_label, ncol = 2) + -->
+<!--   labs( -->
+<!--     x = "", -->
+<!--     y = "Predicted Probability", -->
+<!--     color = "Response\nCategory", -->
+<!--     title = "Predicted Probabilities by Election Period and Vote Choice", -->
+<!--     subtitle = "Points show mean probability with 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     legend.position = "right", -->
+<!--     panel.grid.major.x = element_blank(), -->
+<!--     strip.text = element_text(size = 12, face = "bold") -->
+<!--   ) + -->
+<!--   scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1)) + -->
+<!-- scale_color_manual(values = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey", "4" = "darkslategrey", "5" = "black"), -->
+<!--  labels = c("1" = "Strongly Not Support", "2" = "Not Support", "3" = "Neutral", "4" = "Support", "5" = "Strongly Support")) -->
+<!-- ``` -->
+<!-- ```{r, warning = FALSE, message = FALSE, echo = TRUE} -->
+<!-- library(dplyr) -->
+<!-- me = calculate_marginal_effect( -->
+<!--   predictions, -->
+<!--   focal_var = "prepost", -->
+<!--   focal_contrast = c(0, 1), -->
+<!--   moderator = "vote_trump" -->
+<!-- )  -->
+<!-- print(me) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- # devtools::load_all() -->
+<!-- trump_margins = plotMarginalEffects(me |> filter(vote_trump == 1)) -->
+<!-- biden_margins = plotMarginalEffects(me |> filter(vote_trump == 0)) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- biden_no_legend <- biden + theme(legend.position = "none") -->
+<!-- trump_no_legend <- trump + theme(legend.position = "none") -->
+<!-- biden_no_legend + biden_margins+ -->
+<!-- trump_no_legend + trump_margins +  -->
+<!--   plot_layout(widths = c(0.3, 0.4), -->
+<!--               heights = c(1, 1)) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+<!-- # 2. Plotting the marginal effects -->
+<!-- p <- ggplot(me |> filter(vote_trump == 0), aes(y = category, x = mean_effect)) + -->
+<!--   geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey", size = 0.5) + -->
+<!--   geom_errorbarh(aes(xmin = lower_ci, xmax = upper_ci),  -->
+<!--                  height = 0.05,  -->
+<!--                  color = "darkgrey") + -->
+<!--   geom_point(size = 5, color = "black", alpha = 0.5) +  -->
+<!--   labs( -->
+<!--     x = "Estimated Effect and Confidence Interval", -->
+<!--     y = "Category", -->
+<!--     title = "Marginal Effects (Biden Voters)" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     panel.grid.major.y = element_blank(),  -->
+<!--     panel.grid.minor.y = element_blank(), -->
+<!--     plot.title = element_text(hjust = 0.5) -->
+<!--   ) + -->
+<!--   scale_x_continuous(limits = c(-0.2, 0.2), breaks = seq(-0.2, 0.2, by = 0.1)) + -->
+<!--   scale_y_discrete( -->
+<!--     labels = c( -->
+<!--       "1" = "Strongly Not Support",  -->
+<!--       "2" = "Do Not Support",  -->
+<!--       "3" = "Neutral",  -->
+<!--       "4" = "Support",  -->
+<!--       "5" = "Strongly Support" -->
+<!--     ) -->
+<!--   ) -->
+<!-- # Print the plot -->
+<!-- print(p) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- library(vayr) -->
+<!-- library(dplyr) -->
+<!-- observed_counts <- sample_df %>% -->
+<!--   group_by(prepost, vote_trump, attend_march) %>% -->
+<!--   summarise(n = n(), .groups = "drop") %>% -->
+<!--   rename(category = attend_march) %>% -->
+<!--   mutate(category = factor(category)) |> -->
+<!--   filter(!is.na(vote_trump)) -->
+<!-- # Get predictions for joining -->
+<!-- pred_summary <- summarize_predictions(predictions) %>% -->
+<!--   mutate(category = factor(category)) -->
+<!-- plot_data <- sample_df %>% -->
+<!--   filter(!is.na(vote_trump)) %>% -->
+<!--   mutate(category = factor(attend_march)) %>% -->
+<!--   left_join(pred_summary %>% dplyr::select(prepost, vote_trump, category, mean_prob),  -->
+<!--             by = c("prepost" = "prepost", "vote_trump" = "vote_trump", "category" = "category")) %>% -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")) -->
+<!--   ) -->
+<!-- # Create the plot -->
+<!-- pred_summary %>% -->
+<!--   left_join(observed_counts, by = c("prepost", "vote_trump", "category")) %>% -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")) -->
+<!--   ) %>% -->
+<!--   ggplot(aes(x = prepost_label, y = mean_prob, color = category, group = category)) + -->
+<!--   # Sunflowers centered at predicted probabilities -->
+<!--   geom_point(data = plot_data,  -->
+<!--              aes(x = prepost_label, y = mean_prob, color = category), -->
+<!--              position = position_sunflowerdodge(width = 0.5, density = 50, aspect_ratio = 5), -->
+<!--              size = 0.2, alpha = 0.25, inherit.aes = FALSE) + -->
+<!--   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), -->
+<!--                 position = position_dodge(width = 0.5), -->
+<!--                 width = 0.1, linewidth = 0.8, alpha = 0.7) + -->
+<!--   geom_line(position = position_dodge(width = 0.5), linewidth = 1) +  -->
+<!--   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci, fill = category), -->
+<!--               position = position_dodge(width = 0.5), -->
+<!--               alpha = 0.2, color = NA)  +  -->
+<!--   facet_wrap(~vote_trump_label, ncol = 1) + -->
+<!--   labs( -->
+<!--     x = "", -->
+<!--     y = "Predicted Probability", -->
+<!--     color = "Response\nCategory", -->
+<!--     title = "Predicted Probabilities by Election Period and Vote Choice", -->
+<!--     subtitle = " Lines show change in predicted probabilities;\nSunflower plot corresponds to the relative proportion of respondents in that category;\nerror bars are 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     legend.position = "bottom", -->
+<!--     panel.grid.major.x = element_blank(), -->
+<!--     strip.text = element_text(size = 12, face = "bold") -->
+<!--   ) + -->
+<!--   scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1)) + -->
+<!--   scale_color_manual(values = c("1" = "lightgrey", "2" = "grey", "3" = "darkgrey", "4" = "darkslategrey", "5" = "black"), -->
+<!--  labels = c("1" = "Strongly Not Support", "2" = "Do Not Support", "3" = "Neutral", "4" = "Support", "5" = "Strongly Support")) -> points -->
+<!-- points -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- library(vayr) -->
+<!-- library(dplyr) -->
+<!-- observed_counts <- sample_df %>% -->
+<!--   group_by(prepost, vote_trump, attend_march) %>% -->
+<!--   summarise(n = n(), .groups = "drop") %>% -->
+<!--   rename(category = attend_march) %>% -->
+<!--   mutate(category = factor(category)) |> -->
+<!--   filter(!is.na(vote_trump)) -->
+<!-- pred_summary <- summarize_predictions(predictions) %>% -->
+<!--   mutate(category = factor(category)) -->
+<!-- expected_values_ci <- predictions %>% -->
+<!--   mutate(category_num = as.numeric(as.character(category))) %>% -->
+<!--   group_by(draw, prepost, vote_trump) %>% -->
+<!--   summarise(expected_value = sum(category_num * probability), .groups = "drop") %>% -->
+<!--   group_by(prepost, vote_trump) %>% -->
+<!--   summarise( -->
+<!--     mean_expected = mean(expected_value), -->
+<!--     lower_ci = quantile(expected_value, 0.025), -->
+<!--     upper_ci = quantile(expected_value, 0.975), -->
+<!--     .groups = "drop" -->
+<!--   ) %>% -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")) -->
+<!--   ) -->
+<!-- # View expected values with CI -->
+<!-- print(expected_values_ci) -->
+<!-- # Prepare raw data aligned with predicted probabilities -->
+<!-- plot_data <- sample_df %>% -->
+<!--   filter(!is.na(vote_trump)) %>% -->
+<!--   mutate(category = factor(attend_march)) %>% -->
+<!--   left_join(pred_summary %>% dplyr::select(prepost, vote_trump, category, mean_prob),  -->
+<!--             by = c("prepost" = "prepost", "vote_trump" = "vote_trump", "category" = "category")) %>% -->
+<!--   mutate( -->
+<!--     prepost_label = factor(prepost,  -->
+<!--                           levels = c(0, 1),  -->
+<!--                           labels = c("Pre-Election", "Post-Election")), -->
+<!--     vote_trump_label = factor(vote_trump, -->
+<!--                              levels = c(0, 1), -->
+<!--                              labels = c("Biden Voters", "Trump Voters")) -->
+<!--   ) -->
+<!-- # Expected value plot WITH confidence intervals -->
+<!-- # Expected value plot with 1-5 scale and labeled points -->
+<!--  ggplot(expected_values_ci, aes(x = prepost_label, y = mean_expected,  -->
+<!--                                color = vote_trump_label, group = vote_trump_label)) + -->
+<!--   # Add midpoint reference line at 3 -->
+<!--   geom_hline(yintercept = 3, linetype = "dashed", color = "gray50", linewidth = 0.5) + -->
+<!--   # geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci, fill = vote_trump_label), -->
+<!--   #             alpha = 0.2, color = NA) + -->
+<!--   geom_line(linewidth = 0.5) + -->
+<!--   geom_point(size = 4, alpha = 0.3) + -->
+<!--   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), -->
+<!--                 width = 0.005, linewidth = 1) + -->
+<!--   labs( -->
+<!--     x = "", -->
+<!--     y = "Expected Support Level", -->
+<!--     color = "Vote Choice", -->
+<!--     fill = "Vote Choice", -->
+<!--     title = "Attend a March or Rally", -->
+<!--     subtitle = "Expected value = sum(category x probability) with 95% confidence intervals" -->
+<!--   ) + -->
+<!--   theme_minimal() + -->
+<!--   theme( -->
+<!--     legend.position = "bottom", -->
+<!--     panel.grid.major.x = element_blank() -->
+<!--   ) + -->
+<!--   scale_y_continuous( -->
+<!--     limits = c(2, 4), -->
+<!--     breaks = 2:4, -->
+<!--     labels = c("2" = "Oppose",  -->
+<!--                "3" = "Neutral",  -->
+<!--                "4" = "Support") -->
+<!--   ) + -->
+<!--   scale_color_manual(values = c("Biden Voters" = "#457B9D", "Trump Voters" = "#E63946")) + -->
+<!--   scale_fill_manual(values = c("Biden Voters"  = "#457B9D", "Trump Voters" = "#E63946"))   -->
+<!-- ``` -->
+<!-- ## Marginal effects. -->
+<!-- Say are interest is in whether these changes are statistically significant at the conventional 0.05 level. We can use the `predict_logit_probs()` function to generate predicted probabilities from a binary logit model, and then summarize those predictions. -->
+<!-- This gives us the marginal effect of supporting attending a march, for Trump voters versus Biden voters, from pre- to post-election. The marginal effect is just the change from pre to post for each group. -->
+<!-- ```{r} -->
+<!-- library(patchwork) -->
+<!--   points + p +  -->
+<!--   plot_layout(widths = c(0.3, 0.4), -->
+<!--               heights = c(1, 0.5)) -->
+<!-- ``` -->
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

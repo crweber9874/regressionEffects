@@ -218,7 +218,7 @@ recode_data <- westernData %>%
 
 
 
-attend_march = polr(as.factor(party_identification3) ~ prepost*vote_trump , 
+attend_march = polr(as.factor(attend_march) ~ prepost*vote_trump , 
                data = recode_data)
 criticize_election = polr(as.factor(criticize_election) ~ prepost*vote_trump , 
                data = recode_data)
@@ -231,6 +231,158 @@ recount = polr(as.factor(recount) ~ prepost*vote_trump ,
 
 summary(attend_march)
 ```
+
+
+## Bayesian 
+
+```{r}
+library(brms)
+attend_march = brm(attend_march ~ prepost*vote_trump , 
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 1)
+
+```
+
+
+
+# Construct Marginal Effects 
+
+I construct the marginal effect as follows:
+
+* Construct a design matrix -- generate predictions when `prepost` $\in 0,1$ and `vote_trump` $\in 0,1$.
+* Pivot the data to wide and construct the differences, the marginal effects.
+* Pivot back to long so that we can summarize the data.
+* Generate mean marginal effects, for each category, when comparing `prepost` = 1 versus `prepost` = 0, for each level of `vote_trump`.
+
+```{r}
+library(brms)
+library(tidybayes)
+
+D_matrix = expand_grid(
+  prepost = c(0, 1),
+  vote_trump = c(0, 1)
+) 
+
+## Construct Marginal Effects  
+D_matrix |> 
+add_epred_draws(attend_march) |> 
+  pivot_wider(
+    names_from = .category,
+    values_from = .epred,
+    names_prefix = "prob_"
+  ) |> 
+  ungroup() |>
+ dplyr::select(-c(.row, .chain, .iteration)) |> 
+pivot_wider(
+    names_from = prepost,
+    values_from = starts_with("prob_"),
+    names_sep = "_"
+  ) |>
+  mutate(
+    marginal_effect_1 = prob_1_1 - prob_1_0,
+    marginal_effect_2 = prob_2_1 - prob_2_0,
+    marginal_effect_3 = prob_3_1 - prob_3_0
+  ) |>
+  dplyr::select(vote_trump, .draw, starts_with("marginal_effect")) %>%
+  ungroup() %>%
+  group_by(vote_trump) %>%
+  summarise(
+    mean1 = mean(marginal_effect_1),
+    sd1 = sd(marginal_effect_1),
+    lower1 = quantile(marginal_effect_1, 0.025),
+    upper1 = quantile(marginal_effect_1, 0.975),
+    mean2 = mean(marginal_effect_2),
+    sd2 = sd(marginal_effect_2),
+    lower2 = quantile(marginal_effect_2, 0.025),
+    upper2 = quantile(marginal_effect_2, 0.975),
+    mean3 = mean(marginal_effect_3),
+    sd3 = sd(marginal_effect_3),
+    lower3 = quantile(marginal_effect_3, 0.025),
+    upper3 = quantile(marginal_effect_3, 0.975),
+    .groups = "drop"
+  ) |>
+pivot_longer(
+  cols = -vote_trump,
+  names_to = c(".value", "category"),
+  names_pattern = "(.+)(\\d)$"
+) -> marginal_effect
+
+```
+
+
+## Generalized Function
+
+The above function is hardcoded to work with `prepost` as the contrast variable, and `vote_trump` as the moderator, with three categories. Let's make it more generalizable
+
+```{r}
+
+library(brms)
+library(tidybayes)
+library(dplyr)
+library(tidyr)
+
+#' Calculate Marginal Effects from a brms Model
+#' Contrast variable == the variable for the marginal effect, `prepost`
+#' Specify contrast values, default is 0 and 1, but for continuous variables, use quantile
+#' Moderators == list of other variables to hold constant
+
+calculate_marginal_effects <- function(model, 
+                                       contrast_var, 
+                                       contrast_vals = c(0, 1), 
+                                       moderators = NULL) {
+  
+  # 1. Construct the grid, based on variable of marginal effect, DMatrix from above
+  d_grid <- expand_grid(
+    {{ contrast_var }} := contrast_vals,
+    moderators
+  )
+  
+  # 2. Get Draws and calculate prosterior predictions, draws passing dmatrix, see above
+  draws_processed <- d_grid |>
+    add_epred_draws(model) |>
+    ungroup() |>
+    dplyr::select(.draw, .category, .epred, {{ contrast_var }}, names(moderators)) |>
+    
+    pivot_wider(
+      names_from = {{ contrast_var }},
+      values_from = .epred
+    ) |>
+    
+    mutate(
+      marginal_effect = .data[[as.character(contrast_vals[2])]] - 
+                        .data[[as.character(contrast_vals[1])]]
+    ) 
+  # summarize the marginal effects
+  summary_stats <- draws_processed |>
+    group_by(across(all_of(names(moderators))), .category) |>
+    summarise(
+      mean = mean(marginal_effect),
+      sd = sd(marginal_effect),
+      lower = quantile(marginal_effect, 0.025),
+      upper = quantile(marginal_effect, 0.975),
+      .groups = "drop"
+    )
+  
+  return(summary_stats)
+}
+```
+
+```{r}
+ marginal_effects <- calculate_marginal_effects(
+     model = attend_march, 
+     contrast_var = prepost, 
+     contrast_vals = c(0, 1), 
+     moderators = tibble(vote_trump = c(0, 1))
+ )
+head(results)
+```
+
+
+
+## Frequentist 
 
 There is clearly an interaction effect -- support varies depending on whether the observation was before or after the election **and** whether the respondent voted for Trump or Biden. The sign of the lower order and interaction terms seems to indicate that Trump supporters are more supportive, post-election; Biden voters are more supporting in the pre-election. But how should we interpret this.
 
@@ -292,18 +444,52 @@ cat("The dimensions of this matrix:\n",
 head(predictions_all)
 ```
 
-Let's now create summaries.
-
-```{r, warning = FALSE, message = FALSE, echo = TRUE}
-summarize_predictions(predictions_march) |> head()
-```
-
-
-This is useful but sort of messy, because we don't know how many observations are in each of the cells. All we can see is that support for attending a march increases after the election (for Trump voters), but the opposite occurs for Biden voters. Let's scale the points by the number of observations.
-
 ### Data Summarization Block
 
+
+Let's now create summaries.
+
+
 This simplifies things by using `prepare_prediction_data`, which generates a list, the plot data and the observed counts.
+```{r, cache = FALSE}
+plot_dat <- prepare_prediction_data(
+  recode_data, 
+  predictions_all ,
+  category = "prepost",
+  group_vars = c("vote_trump", "category")
+)
+
+
+```
+
+## This is how it should look.
+
+Each sunflower plot represents the relative size in the observed counts (so if 1=agree; 0 = otherwiese), the idea being it shows the relative prevalence in the sample data. Then each point is connected to the center of the sunflower ll. this just a line plot with nodes scaled by prevalence.
+
+This simplifies things by using `prepare_prediction_data`, which generates a list, the plot data and the observed counts.
+
+
+```{r}
+#| cache: false
+#| warning: false
+#| message: false
+
+# Combine into single file maintaining structure
+plot_data_all <- list(
+  plot_dat,
+  observed_counts = bind_rows(
+    plot_data_march$observed_counts |> mutate(outcome = "attend_march"),
+    plot_data_burn$observed_counts |> mutate(outcome = "burn_flag"),
+    plot_data_court$observed_counts |> mutate(outcome = "court"),
+    plot_data_criticize$observed_counts |> mutate(outcome = "criticize_election"),
+    plot_data_recount$observed_counts |> mutate(outcome = "recount")
+  )
+)
+
+plot_data_all$plotting_data |> filter(outcome == "burn_flag")
+
+```
+
 ```{r, cache = FALSE}
 
 plot_dat <- prepare_prediction_data(recode_data, predictions_burn,  # Use recode_data, not data
