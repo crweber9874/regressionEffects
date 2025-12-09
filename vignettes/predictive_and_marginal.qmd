@@ -141,7 +141,7 @@ $$
 \text{ATE}_{j} = \mathbb{E}[Y_{ij}(1)] - \mathbb{E}[Y_{ij}(0)] 
 $$  {#eq-catej}
 
-If the treatment effect across different subgroups, the *conditional average treatment effect* (CATE), the *average treatment effect* (ATE) is simply the  average weighted by frequency effects for the subgroup.s\footnote{We estimate the Average Treatment Effect among Treated Units (ATT) of prepost assignment for Trump and Biden voters.} When the distance between @eq-cate and @eq-atej increases -- that is, heterogeneity; a considerable difference in treatment effects, a "winner-loser" effect -- @eq-ate does not accurately capture treatment effects.
+If the treatment effect across different subgroups, the *conditional average treatment effect* (CATE), the *average treatment effect* (ATE) is simply the  average weighted by frequency effects for the subgroup.s\footnote{We estimate the Average Treatment Effect among Treated Units (ATT) of prepost assignment for Trump and Biden voters.} When the distance between @eq-ate and @eq-catej increases -- that is, heterogeneity; a considerable difference in treatment effects, a "winner-loser" effect -- @eq-ate does not accurately capture treatment effects.
 
 The third issue, population inference requires knowledge of how the sample units were collected. When units are sampled proportional to that of the broader population, one can adjust for sampling error. Sampling weights are used to readjust for imbalances brought about by random sampling or non-random sampling designs. 
 

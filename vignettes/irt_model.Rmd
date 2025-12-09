@@ -1,0 +1,112 @@
+---
+title: "irt_model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  results = "hide",
+  fig.align = "center"
+)
+
+# Suppress Stan/C++ compiler output on Mac
+if (Sys.info()["sysname"] == "Darwin") {
+  options(buildtools.check = function(action) TRUE)
+  Sys.setenv(CPATH = "/opt/R/arm64/include")
+}
+
+# Set default ggplot theme
+library(ggplot2)
+theme_set(theme_minimal(base_size = 11))
+```
+
+
+## Introduction
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+library(brms)
+library(tidybayes)
+library(dplyr)
+library(tidyr)
+library(gt)
+library(dplyr)
+library(tidyr)
+library(MASS)
+library(brms)
+library(gt)
+library(ggplot2)
+library(ggridges)
+library(regressionEffects)
+
+
+download.file("https://raw.githubusercontent.com/crweber9874/advancedRegression/main/data/wss20.rda",
+              destfile = "wss20.rda")
+load("wss20.rda")
+
+wss20 = wss20 |>
+  pivot_wider(
+    names_from = contestation,
+    values_from = contestation_value
+  )
+
+westernData <- wss20 |>
+  mutate(contestation = rowMeans(cbind(attend_march, criticize_election, 
+                                       burn_flag, court, recount),
+                                 na.rm = TRUE), 
+        vote_trump = presvote_trump_2020,
+        authoritarianism = rowMeans(cbind(auth_1, auth_2, auth_3, auth_4), na.rm = TRUE),
+        republican = ifelse(party_identification3 == 3, 1, 0),
+        democrat = ifelse(party_identification3 == 1, 1, 0),
+        independent = ifelse(party_identification3 == 2, 1, 0),
+        libcon = (ideology5 - 1)/4,
+        prepost = ifelse(prepost == "post", 1, 0),
+        id = row_number()
+)  |>
+  pivot_longer(
+    cols = c(attend_march, criticize_election, burn_flag, court, recount),
+    names_to = "contestation_item",
+    values_to = "contestation_value"
+  )
+  # pivot to long from contestation vars
+```
+
+
+### Specify an IRT Model
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+library(brms)
+
+irt_contestation <- brm(
+  contestation_value ~ contestation_item + 
+    prepost*vote_trump +
+    (0 + prepost*vote_trump | contestation_item) +
+    (1 + prepost*vote_trump | id),
+  data = westernData,
+  family = cumulative("logit"),
+  cores = 10,
+  iter = 2000,
+  chains = 4,
+  control = list(adapt_delta = 0.95),  # increase from default 0.8
+  prior = c(
+    prior(normal(0, 1.5), class = "b"),
+    prior(exponential(1), class = "sd")
+  )
+)
+
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+recode_variable <- function(data, variable, recode_rules) {
+  data %>%
+    dplyr::mutate(
+      !!variable := dplyr::case_when(
+        !!dplyr::sym(variable) %in% names(recode_rules) ~ 
+          as.numeric(recode_rules[as.character(!!dplyr::sym(variable))]),
+        TRUE ~ NA_real_
+      )
+    )
+}
+```
