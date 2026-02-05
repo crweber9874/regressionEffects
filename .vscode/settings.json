@@ -1,0 +1,64 @@
+{
+  // R Language Settings
+  "r.rterm.mac": "/usr/local/bin/R",
+  "r.rpath.mac": "/usr/local/bin/R",
+  "r.bracketedPaste": true,
+  "r.sessionWatcher": true,
+  "r.alwaysUseActiveTerminal": true,
+
+  // R LSP (Language Server Protocol) Settings
+  "r.lsp.enabled": true,
+  "r.lsp.debug": false,
+  "r.lsp.diagnostics": true,
+
+  // Quarto Settings
+  "quarto.render.renderOnSave": false,
+
+  // Editor Settings for R files
+  "[r]": {
+    "editor.formatOnSave": false,
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.wordWrap": "off",
+    "editor.defaultFormatter": "REditorSupport.r"
+  },
+
+  "[rmd]": {
+    "editor.formatOnSave": false,
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.wordWrap": "on"
+  },
+
+  "[quarto]": {
+    "editor.formatOnSave": false,
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.wordWrap": "on"
+  },
+
+  // File Associations
+  "files.associations": {
+    "*.qmd": "quarto",
+    "*.Rmd": "rmd",
+    "*.rmd": "rmd"
+  },
+
+  // Exclude patterns
+  "files.exclude": {
+    "**/.Rproj.user": true,
+    "**/.Rhistory": true,
+    "**/.RData": true,
+    "**/.Ruserdata": true
+  },
+
+  // Search exclude patterns
+  "search.exclude": {
+    "**/.Rproj.user": true,
+    "**/docs": true,
+    "**/man": true
+  },
+
+  // Git settings
+  "git.ignoreLimitWarning": true
+}

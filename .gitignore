@@ -1,7 +1,35 @@
+# R Project Files
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
+.httr-oauth
+
+# R Package Build
+*.tar.gz
+*.Rcheck/
+/man/*.Rd
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+.DS_Store
+
+# Quarto
+/.quarto/
+_site/
+*_cache/
+*_files/
+
+# Documentation
+docs/
+pkgdown/
+
+# Temporary files
+*.log
+setup_log.txt
 docs
 final_exam.Rmd
 final_exam.pdf

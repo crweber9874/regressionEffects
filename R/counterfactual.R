@@ -27,8 +27,8 @@
 #' # Custom flip values
 #' full_set <- generate_counterfactual_data(
 #'   recode_data,
-#'   treatment_var = "treatment_status",
-#'   flip_values = c("control", "treatment")
+#'   treatment_var = "prepost",
+#'   flip_values = c(0, 1)
 #' )
 #' }
 #'

@@ -1,0 +1,64 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install R Package Dependencies",
+      "type": "shell",
+      "command": "Rscript",
+      "args": [
+        "-e",
+        "install.packages(c('devtools', 'roxygen2', 'testthat', 'pkgdown', 'rmarkdown', 'quarto'))"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "Build Package",
+      "type": "shell",
+      "command": "Rscript",
+      "args": [
+        "-e",
+        "devtools::document(); devtools::build()"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Check Package",
+      "type": "shell",
+      "command": "Rscript",
+      "args": [
+        "-e",
+        "devtools::check()"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Render Quarto Document",
+      "type": "shell",
+      "command": "quarto",
+      "args": [
+        "render",
+        "${file}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Preview Quarto Document",
+      "type": "shell",
+      "command": "quarto",
+      "args": [
+        "preview",
+        "${file}"
+      ],
+      "problemMatcher": [],
+      "isBackground": true
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "recommendations": [
+    // R Language Support
+    "rdebugger.r-debugger",
+    "reditorsupport.r",
+
+    // Quarto Support
+    "quarto.quarto",
+
+    // Additional helpful extensions
+    "ms-vscode.sublime-keybindings",
+    "yzhang.markdown-all-in-one",
+    "streetsidesoftware.code-spell-checker"
+  ],
+  "unwantedRecommendations": []
+}

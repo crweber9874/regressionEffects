@@ -28,10 +28,21 @@ theme_set(theme_minimal(base_size = 11))
 ```
 
 
+## Analysis
 
+Throughout the analysis, we leverage a causal inference framework to estimate the effect of being in the pre-election or post-election period. In the *2020 Western States* data, assignment to the pre- or post- election period is not randomized. Instead, we were fortuitously collecting data over an extended period during the 2020 presidential election, an election in which the results were unknown on election day. In the *2024 Western States* data, assignment to the pre- or post- election period is randomized; respondents were randomly assigned to be interviewed before or after the election results were known. In both datasets, we aim to estimate the treatment effect of being in the pre-election versus post-election period on support for electoral contestation behaviors. According to the *winner-loser* hypothesis, the treatment effect should vary depending on whether the respondent voted for a winning or losing candidate. 
 
-## Introduction
+We use *g-computation* to estimate the conditional marginal effects of being in the pre-election versus post-election period, where the marginal effect should vary by vote choice (Trump versus Biden in 2020; Trump versus Harris in 2024). First, we fit an *outcome* regression model, an electoral contestation item (e.g., support for attending a march) as a function of *pre* versus *post* election, *vote choice*, the *interaction between vote choice and pre/post election*, *age*, *Latino*, whether the respondent has a four-year *college degree*, and *gender*.  Following estimation, we then simulate (using the posterior distribution) support for electoral contestation behaviors under both treatment conditions (pre-election and post-election), which allows us to estimate individual level treatment effects. From here, we just summarize these individual level treatment effects among Trump versus Biden/Harris voters, a *conditional marginal effect*.
 
+Here, we focus on *five* contestation items in both datasets, (1) support for attending a march, (2) support for criticizing the election results, (3) support for burning the American flag, (4) support for taking the matter to court, and (5) support for requesting a recount. Each item is measured on a 5-point scale: (1) Strongly Oppose, (2) Oppose, (3) Neutral, (4) Support, and (5) Strongly Support. 
+
+Three parameterizations for the outcome equations are used.
+
+(1) An *ordered logit* model is estimated for each item, recoding the 5-point scale into three categories: (1) Support (4 and 5), (2) Neutral (3), and (3) Oppose (1 and 2). For this plot, we only present the *Support* category, and the corresponding probability and marginal effects estimates.
+
+(2) A *multinomial logit* model is estimated for each item, again using the recoded data (1) Support (4 and 5), (2) Neutral (3), and (3) Oppose (1 and 2). For this plot, we only present the *Support* category, and the corresponding probability and marginal effects estimates. This relaxes the *parallel lines* assumption in the *ordinal model*, that covariates have the same effect across all categories.
+
+(3) A *linear regression* model is estimated for each item, retaining the 5-point scale. For this plot, we use the `vayr` package to show mean estimates alongisde observed distributions.
 
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
@@ -47,20 +58,25 @@ library(brms)
 library(gt)
 library(ggplot2)
 library(ggridges)
-library(regressionEffects)
+devtools::load_all()
 
+data(wss20, package = "regressionEffects")
+data(wss24, package = "regressionEffects")
 
-download.file("https://raw.githubusercontent.com/crweber9874/advancedRegression/main/data/wss20.rda",
-              destfile = "wss20.rda")
-load("wss20.rda")
-
-wss20 = wss20 |>
+# Pivot from long to wide format
+wss20 <- wss20 |>
   pivot_wider(
     names_from = contestation,
     values_from = contestation_value
   )
 
-westernData <- wss20 |>
+wss24 <- wss24 |>
+  pivot_wider(
+    names_from = contestation,
+    values_from = contestation_value
+  )
+
+westernData20 <- wss20 |>
   mutate(contestation = rowMeans(cbind(attend_march, criticize_election, 
                                        burn_flag, court, recount),
                                  na.rm = TRUE), 
@@ -72,7 +88,27 @@ westernData <- wss20 |>
         libcon = (ideology5 - 1)/4,
         prepost = ifelse(prepost == "post", 1, 0)
 )
+
+
+westernData24 <- wss24 |>
+  mutate(contestation = rowMeans(cbind(attend_march, criticize_election,
+                                       burn_flag, court, recount),
+                                 na.rm = TRUE),
+        vote_trump = presvote_trump_2024,  # 2024 data uses presvote_trump_2024
+        authoritarianism = rowMeans(cbind(auth_1, auth_2, auth_3, auth_4), na.rm = TRUE),
+        republican = ifelse(party_identification3 == 3, 1, 0),
+        democrat = ifelse(party_identification3 == 1, 1, 0),
+        independent = ifelse(party_identification3 == 2, 1, 0),
+        libcon = (ideology5 - 1)/4,
+        prepost = ifelse(survey_wave == "post", 1, 0)  # wss24 uses survey_wave
+)
+
+
 ```
+
+
+## Functions
+### Recode Variable
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 recode_variable <- function(data, variable, recode_rules) {
@@ -87,48 +123,113 @@ recode_variable <- function(data, variable, recode_rules) {
 }
 ```
 
+### Calculate Marginal Effects
+
 ```{r, echo=FALSE, warning = FALSE, message = FALSE}
 calculate_marginal_effects <- function(model, 
-                                       contrast_var, 
-                                       contrast_vals = c(0, 1), 
-                                       moderators = NULL) {
+                                       treatment_var,
+                                       treatment_vals = c(pre = 0, post = 1),
+                                       moderators = NULL,
+                                       outcome_categories = NULL) {
   
-  # 1. Construct the grid, based on variable of marginal effect, DMatrix 
-  d_grid <- expand_grid(
-    {{ contrast_var }} := contrast_vals,
-    moderators
+  model_dat <- model$data %>%
+    mutate(id = row_number())
+  
+  # Create counterfactual sets
+  control_dat <- model_dat %>%
+    mutate(!!sym(treatment_var) := treatment_vals["pre"])
+  
+  treatment_dat <- model_dat %>%
+    mutate(!!sym(treatment_var) := treatment_vals["post"])
+  
+  full_counterfactual_set <- bind_rows(
+    control_dat %>% mutate(condition = "Pre"),
+    treatment_dat %>% mutate(condition = "Post")
   )
   
-  # 2. Get Draws and calculate prosterior predictions,
-  draws_processed <- d_grid |>
-    add_epred_draws(model) |>
-    ungroup() |>
-    dplyr::select(.draw, .category, .epred, {{ contrast_var }}, names(moderators)) |>
+  # Generate predictions
+  preds_draws <- model %>%
+    add_epred_draws(
+      newdata = full_counterfactual_set,
+      re_formula = NA
+    ) %>%
+    ungroup()
+  
+  # Check if categorical or continuous
+  has_category <- ".category" %in% names(preds_draws)
+  
+  # Calculate individual effects
+  if (has_category) {
+    individual_effects <- preds_draws %>%
+      dplyr::select(.draw, id, condition, .category, .epred, all_of(moderators)) %>%
+      pivot_wider(
+        names_from = condition,
+        values_from = .epred
+      ) %>%
+      mutate(individual_effect = Post - Pre)
     
-    pivot_wider(
-      names_from = {{ contrast_var }},
-      values_from = .epred
-    ) |>
+    grouping_vars <- c(".category", moderators)
+  } else {
+    individual_effects <- preds_draws %>%
+      dplyr::select(.draw, id, condition, .epred, all_of(moderators)) %>%
+      pivot_wider(
+        names_from = condition,
+        values_from = .epred
+      ) %>%
+      mutate(individual_effect = Post - Pre)
     
-    mutate(
-      marginal_effect = .data[[as.character(contrast_vals[2])]] - 
-                        .data[[as.character(contrast_vals[1])]]
-    ) 
-  summary_stats <- draws_processed |>
-    group_by(across(all_of(names(moderators))), .category) |>
+    grouping_vars <- moderators
+  }
+  
+  # Marginal effects summary
+  marginal_summary <- individual_effects %>%
+    group_by(across(all_of(grouping_vars))) %>%
     summarise(
-      mean = mean(marginal_effect),
-      sd = sd(marginal_effect),
-      lower = quantile(marginal_effect, 0.025),
-      upper = quantile(marginal_effect, 0.975),
+      mean = mean(individual_effect),
+      sd = sd(individual_effect),
+      lower = quantile(individual_effect, 0.025),
+      upper = quantile(individual_effect, 0.975),
+      n = n(),
       .groups = "drop"
     )
   
-  return(summary_stats)
+  # Predictive effects summary
+  if (has_category) {
+    predictive_summary <- preds_draws %>%
+      dplyr::select(.draw, .category, condition, .epred, all_of(moderators)) %>%
+      group_by(.category, condition, across(all_of(moderators))) %>%
+      summarise(
+        mean = mean(.epred),
+        lower = quantile(.epred, 0.025),
+        upper = quantile(.epred, 0.975),
+        .groups = "drop"
+      )
+  } else {
+    predictive_summary <- preds_draws %>%
+      dplyr::select(.draw, condition, .epred, all_of(moderators)) %>%
+      group_by(condition, across(all_of(moderators))) %>%
+      summarise(
+        mean = mean(.epred),
+        lower = quantile(.epred, 0.025),
+        upper = quantile(.epred, 0.975),
+        .groups = "drop"
+      )
+  }
+  
+  # Filter to outcome categories if specified (only applies to categorical)
+  if (!is.null(outcome_categories) && has_category) {
+    marginal_summary <- marginal_summary %>%
+      filter(.category %in% outcome_categories)
+    predictive_summary <- predictive_summary %>%
+      filter(.category %in% outcome_categories)
+  }
+  
+  return(list(
+    marginal_effects = marginal_summary,
+    predictive_effects = predictive_summary
+  ))
 }
 ```
-
-
 
 Several often ignored problems emerge in causal inference using observational data: (1) selection bias into the treatment, (2) heterogeneity in treatment effects across units, and (3) sampling methods that affect whether a unit is actually observed; what is the mechanism that determines whether a unit is selected into the sample? Selection bias reflects the *fundamental problem of causal inference* in that we are unable to observe a unit in both *treatment* and *control* conditions. While this problem extends to randomized experiments, population averaged effects can be reliably estimated because -- unlike observational data -- knowledge of the treatment assignment assignment allows for the accurate estimation of average treatment effects. For observational data, population averaged effects may be confounded by unobserved variables that influence both treatment assignment and outcome, $y$.
 
@@ -161,9 +262,9 @@ The third issue, population inference requires knowledge of how the sample units
 
 I started with an ordered logit model in `R`, from the `brms` package. Data are analyzed comparing **pre** v. **post** election, to see if support for electoral contestation behavior (here, attending a march) change  -- for Trump voters versus Biden voters. This is specified to examine whether support for contestation varies depending upon electoral functions; a **winner-loser effect**.
 
-First, let's recode the data, then estimate the model in `brms`. The model without covariates.
+First, let's recode the data, then estimate the model in `brms`. 
 
-
+In this example, `recode_data` is created by a simple function that scores responses in Support, Neutral, Oppose categories. The `brms` model from is an ordered logit `
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 recode_data <- westernData %>%
@@ -173,21 +274,236 @@ recode_data <- westernData %>%
   recode_variable("recount", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) |>
   recode_variable("attend_march", c("1" = 1, "2" = 1, "3" = 2, "4" = 3, "5" = 3)) 
 
-attend_march = brm(attend_march ~ prepost*vote_trump , 
+attend_march = brm(attend_march ~ prepost*vote_trump + female + latino + college + scale(age),
                data = recode_data,
                family = cumulative("logit"),
                cores = 10,
                iter = 2000,
-               chains = 1,
-               refresh = 0)
+               chains = 3)
+burn_flag = brm(burn_flag ~ prepost*vote_trump  + female + latino + college + scale(age),
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 3)
+recount = brm(recount ~ prepost*vote_trump  + female + latino + college + scale(age),
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 3)
+criticize_election = brm(criticize_election ~ prepost*vote_trump  + female + latino + college + scale(age),
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 3)
+court = brm(court ~ prepost*vote_trump  + female + latino + college + scale(age),
+               data = recode_data,
+               family = cumulative("logit"),
+               cores = 10,
+               iter = 2000,
+               chains = 3)
+
 ```
+
+### Construct True Marginal Effects
+
+After running the model, create two versions of the data -- one where all units are in the post-election period, and one where all units are in the pre-election period. Then, just bind these together; they're subsequently used to generate predictions.
+
+```{r}
+model_dat = attend_march$data |>
+  mutate(id = row_number())
+
+treatment <- model_dat %>%
+  mutate(prepost = 1)
+
+control <- model_dat %>%
+  mutate(prepost = 0)
+
+full_counterfactual_set <- bind_rows(treatment, control)
+```
+
+
+```{r}
+library(tidybayes)
+preds_draws <- attend_march %>%
+  add_epred_draws(
+    newdata = full_counterfactual_set,
+    re_formula = NA 
+  )
+cat("The size of this data is rather large...\n
+    as it represents 2000 draws from a posterior for all units in the data...\n
+    in two periods, pre and posttest. The dimensions are\n",
+    print(dim(preds_draws)))
+```
+
+
+## Summarize Data
+```{r}
+individual_effects <- preds_draws %>%
+  ungroup() %>%
+  dplyr::select(.draw, id, prepost, .category, .epred, vote_trump) %>% 
+  mutate(
+    prepost = case_when(
+      prepost == 0 ~ "Pre",
+      prepost == 1 ~ "Post"
+    )
+  ) |>
+  pivot_wider(
+    names_from = prepost,
+    values_from = .epred
+  ) |>
+  mutate(
+    individual_effect = Post - Pre
+  )
+
+
+cat("The Average Marginal Effect in the Sample is:")
+
+print(
+  individual_effects |>
+  summarise(
+    mean_ate = mean(individual_effect),
+    lower_ci = quantile(individual_effect, 0.025),
+    upper_ci = quantile(individual_effect, 0.975)
+  )
+)
+```
+
+## Create Data for Marginal Effect Plot
+
+For this item, Trump voters increase almost 10 percentage points, Biden voters decrease 6 percentage points. 
+
+```{r}
+individual_effects |>
+  group_by(.category, vote_trump) |>
+  summarise(
+    mean = mean(individual_effect),
+    sd = sd(individual_effect),
+    lower = quantile(individual_effect, 0.025),
+    upper = quantile(individual_effect, 0.975)
+  ) |>
+  # Keep only support category
+  dplyr::filter(.category == 3) -> marginal_effects_summary
+
+print(marginal_effects_summary)
+
+```
+
+The figure is created by executing this same procedure for all items, binding everything together, the plotted in a dot-whisker type plot,
+
+```{r}
+all_marginal_eeffects <- bind_rows(
+  calculate_marginal_effects(
+  model = attend_march,
+  treatment_var = "prepost",
+  treatment_vals = c(pre = 0, post = 1),
+  moderators = c("vote_trump"),
+  outcome_categories = 3
+)$marginal_effects|>
+  mutate(outcome = "attend_march"),
+  calculate_marginal_effects(
+    model = burn_flag,
+    treatment_var = "prepost",
+    treatment_vals = c(pre = 0, post = 1),
+    moderators = c("vote_trump"),
+    outcome_categories = 3
+  )$marginal_effects |>
+    mutate(outcome = "burn_flag"
+),
+  calculate_marginal_effects(
+    model = criticize_election,
+    treatment_var = "prepost",
+    treatment_vals = c(pre = 0, post = 1),
+    moderators = c("vote_trump"),
+    outcome_categories = 3
+  )$marginal_effects |>
+    mutate(outcome = "criticize_election"),
+  calculate_marginal_effects(
+    model = recount,
+    treatment_var = "prepost",
+    treatment_vals = c(pre = 0, post = 1),
+    moderators = c("vote_trump"),
+    outcome_categories = 3
+  )$marginal_effects |>
+    mutate(outcome = "recount"),
+  calculate_marginal_effects(
+    model = court,
+    treatment_var = "prepost",
+    treatment_vals = c(pre = 0, post = 1),
+    moderators = c("vote_trump"),
+    outcome_categories = 3
+  )$marginal_effects |>
+    mutate(outcome = "court")
+)
+```
+
+```{r}
+
+all_predictive_effects  =
+  bind_rows(
+    calculate_marginal_effects(
+      model = attend_march,
+      treatment_var = "prepost",
+      treatment_vals = c(pre = 0, post = 1),
+      moderators = c("vote_trump"),
+      outcome_categories = 3
+    )$predictive_effects |>
+      mutate(outcome = "attend_march"),
+    calculate_marginal_effects(
+      model = burn_flag,
+      treatment_var = "prepost",
+      treatment_vals = c(pre = 0, post = 1),
+      moderators = c("vote_trump"),
+      outcome_categories = 3
+    )$predictive_effects |>
+      mutate(outcome = "burn_flag"
+    ),
+    calculate_marginal_effects(
+      model = criticize_election,
+      treatment_var = "prepost",
+      treatment_vals = c(pre = 0, post = 1),
+      moderators = c("vote_trump"),
+      outcome_categories = 3
+    )$predictive_effects |>
+      mutate(outcome = "criticize_election"),
+    calculate_marginal_effects(
+      model = recount,
+      treatment_var = "prepost",
+      treatment_vals = c(pre = 0, post = 1),
+      moderators = c("vote_trump"),
+      outcome_categories = 3
+    )$predictive_effects |>
+      mutate(outcome = "recount"),
+    calculate_marginal_effects(
+      model = court,
+      treatment_var = "prepost",
+      treatment_vals = c(pre = 0, post = 1),
+      moderators = c("vote_trump"),
+      outcome_categories = 3
+    )$predictive_effects |>
+      mutate(outcome = "court")
+  )
+  
+  
+```
+
+```{r}
+print(all_effects)
+```
+
+These data are used to make the left-most portion of the final figure. The predictive effects are just a stop in the process of creating the marginal effects.
+
+
+
+
+
 
 
 
 
 ### Plot Options
-
-
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 
@@ -264,11 +580,7 @@ list(
 ```
 
 
-
-
 ## Predictive Effects
-
-
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 get_ordinal_preds <- function(model, newdata, outcome_name) {
@@ -311,61 +623,167 @@ predictions_all <- bind_rows(
 
 
 
+
+
+
+
+
+
 ## Construct Joint Plot 
 
 
-
-
 ```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=4, fig.height=8}
+predictions_all  |> 
+  mutate(outcome = factor(outcome, levels = sort(unique(outcome)))) |>
+  filter(.category == 3) -> predictions_all
 
-library(ggplot2)
-library(vayr)
-
-ggplot(aes(x = factor(prepost, labels = c("Pre Election", "Post Election")), y = mean, color = as.factor(vote_trump), group = as.factor(vote_trump)),
-       data = predictions_all |> filter(.category == 3)) +
-  geom_point(size = 3, alpha = 0.35) +
+  
+ggplot(aes(x = factor(prepost, labels = c("Pre Election", "Post Election")), 
+           y = mean, 
+           color = as.factor(vote_trump), 
+           group = as.factor(vote_trump)),
+       data = predictions_all |>
+         mutate(outcome = factor(outcome, levels = c("attend_march", "burn_flag", "court", "criticize_election", "recount")))
+       ) +
+  geom_point(size = 3, alpha = 0.25) +
   geom_errorbar(aes(ymin = lower, ymax = upper),
                 width = 0.01, linewidth = 0.9, alpha = 0.5) +
-  facet_wrap(~  outcome, nrow = 5 )+
   geom_line() +
-  theme_minimal() +
-    labs(
+   facet_wrap(~ outcome,
+             nrow = 5,
+             labeller = as_labeller(c(
+                 attend_march = "Attending a March",
+                 burn_flag = "Burning the Flag",
+                 court = "Challenge in Court",
+                 criticize_election = "Criticizing the Election",
+                 recount = "Recount"
+             ))) +
+  scale_y_continuous(limits = c(0, 0.8), breaks = seq(0, 1, 0.2)) +
+  scale_color_manual(name = "Vote Choice",
+                     values = c("0" = "blue", "1" = "red"),
+                     labels = c("0" = "Biden", "1" = "Trump")) +
+  labs(
     x = "",
-    y = "Predicted Probability",
+    y = "",
     color = "Response\nCategory",
-    title = "Predicted Probabilities",
+    title = "",
     subtitle = ""
   ) +
-    scale_y_continuous(limits = c(0, 0.8), breaks = seq(0, 1, 0.2)) +
-    theme_minimal(base_size = 12, base_family = "sans") +
-    theme(
-        plot.title = element_text(size = 12, face = "bold", margin = margin(b = 5)),
-        plot.subtitle = element_text(size = 10, color = "gray40", margin = margin(b = 15)),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.grid.major.y = element_line(color = "gray95", size = 0.3),
-        strip.text = element_text(size = 12, face = "bold", color = "gray20"),
-        strip.background = element_rect(fill = "gray95", color = "white"),
-        axis.text = element_text(size = 10, color = "gray30"),
-        axis.title = element_text(size = 11, color = "gray20", face = "bold"),
-        legend.position = "bottom",
-        legend.text = element_text(size = 10),
-        plot.margin = margin(20, 20, 20, 20)
-    ) +
-    scale_color_manual(name = "Vote Choice",
-                     values = c("0" = "blue", "1" = "red"),
-                     labels = c("0" = "Biden", "1" = "Trump"))
-
+  theme_minimal(base_size = 12, base_family = "sans") +
+  theme(
+    plot.title = element_text(size = 12, face = "bold", margin = margin(b = 5)),
+    plot.subtitle = element_text(size = 10, color = "gray40", margin = margin(b = 15)),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "gray95", size = 0.3),
+    strip.text = element_text(size = 12, face = "bold", color = "gray20"),
+    strip.background = element_rect(fill = "gray95", color = "white"),
+    axis.text = element_text(size = 10, color = "gray30"),
+    axis.title = element_text(size = 11, color = "gray20", face = "bold"),
+    legend.position = "none",
+    legend.text = element_text(size = 10),
+    plot.margin = margin(20, 20, 20, 20)
+  ) ->
+  predictive
 ```
 
 
+## Construct Marginal Effect Plot
+
+```{r,warning = FALSE, message = FALSE, echo = FALSE}
+
+  
+
+margin <- ggplot(marginal_effects_summary |> 
+                   filter(.category == 3) |>
+                   mutate(outcome = factor(outcome, levels = c("recount", "criticize_election", "court", "burn_flag", "attend_march"))),
+
+       aes(x = outcome,
+           y = mean,
+           color = as.factor(vote_trump),
+           group = as.factor(vote_trump))) +
+  geom_point(size = 3, alpha = 0.4, position = position_dodge(width = 0.3)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper),
+                width = 0.12, linewidth = 0.85, alpha = 0.87,
+                position = position_dodge(width = 0.3)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.5) +
+  scale_color_manual(values = c("0" = "#0015BC", "1" = "#E81B23"),
+                     labels = c("0" = "Biden", "1" = "Trump"),
+                     name = "Vote Choice") +
+  coord_flip() +
+  labs(
+    x = "",
+    y = "",
+    title = "",
+    subtitle = ""
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold", margin = margin(b = 8)),
+    plot.subtitle = element_text(size = 10, color = "gray50", margin = margin(b = 12)),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color = "gray90", linewidth = 0.25),
+    axis.text = element_text(size = 10, color = "gray40"),
+    axis.title.x = element_text(size = 11, face = "bold", color = "gray20"),
+    legend.position = "none"
+  ) +
+  # label x axis
+  scale_x_discrete(labels = c(
+    attend_march = "Attending a March",
+    burn_flag = "Burning the Flag",
+    court = "Challenge in Court",
+    criticize_election = "Criticizing the Election",
+    recount = "Recount"
+  ))
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=8}
+library(cowplot)
+legend_plot <- ggplot(data.frame(x = c(0, 1), y = c(1, 1), label = c("Biden", "Trump")),
+                      aes(x = x, y = y, color = label)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("Biden" = "#0015BC", "Trump" = "#E81B23"),
+                     name = "Vote Choice") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+legend <- get_legend(legend_plot)
+
+plot_grid(
+  plot_grid(predictive + theme(legend.position = "none"), 
+            margin + theme(legend.position = "none"),
+            labels = c("A. Probability of Support", "B. Marginal Effects"),
+            label_size = 12,
+            ncol = 2,
+            rel_widths = c(1, 1),
+            align = "hv"),
+  legend,
+  nrow = 2,
+  rel_heights = c(1, 0.1)
+)
+
+# Combine plots without legends, then add shared legend below
+plot_grid(
+  plot_grid(predictive, 
+            margin,
+            labels = c("A. Probability of Support", "B. Marginal Effects"),
+            label_size = 12,
+            ncol = 2,
+            rel_widths = c(1, 1),
+            align = "hv"),
+  legend,
+  nrow = 2,
+  rel_heights = c(1, 0.08)
+)
+# save
+ggsave("figures/predictive_marginal_effects.png",
+       width = 8,
+       height = 8,
+       dpi = 300)
+```
 
 
-
-
-
-
-# Construct Marginal Effects
 
 The above functions, datasets are trivial to construct. Marginal effects are a little more complicated. Here's how I accomplished this.I construct the marginal effect as follows:
 
@@ -375,8 +793,6 @@ The above functions, datasets are trivial to construct. Marginal effects are a l
 -   Generate mean marginal effects, for each category, when comparing `prepost` = 1 versus `prepost` = 0, for each level of `vote_trump`.
 
 Below is a hardcoded version that only works with 3 category data and the `prepost` variable as the contrast, and `vote_trump` as the moderator. This is followed with a generic function which does the same thing, which I'll use in a moment.
-
-
 
 ```{r}
 library(brms)
@@ -433,13 +849,9 @@ pivot_longer(
 
 ```
 
-
-
 ## Generalized Function
 
 The above function is hardcoded to work with `prepost` as the contrast variable, and `vote_trump` as the moderator, with three categories. Let's make it more generalizable
-
-
 
 ```{r}
 marginal_effects_summary <- calculate_marginal_effects(
@@ -454,13 +866,9 @@ marginal_effects_summary <- calculate_marginal_effects(
 head(marginal_effects_summary)
 ```
 
-
-
 The three dataframes, `observed_counts`, `predictive_effects_summary`, and `marginal_effects_summary` are now ready for plotting. \## This is how it should look.
 
 The margins for the plot are generated with `observed_counts`, whereas the dot-lines are generated with `predictive_effects_summary`. This constitutes the left panel of the plot. The right panel is generated from `marginal_effects_summary`.
-
-
 
 ```{r}
 marginal_effects_summary %>%
@@ -518,15 +926,11 @@ plot_annotation(
 
 ```
 
-
-
 From the *pre* to *post* period, Trump voters increased their support for attending a march or rally by about 10 points ($\Delta_y = 0.971, SD = 0.024, 95% \text{Credible Interval} = 0.0520, 0.147)$). Biden voters show the opposite pattern, decreasing their support by about 5 points ($\Delta_y = -0.0612, SD = 0.0246, 95% \text{Credible Interval} = -0.109, -0.002$).
 
 ## Counterfactual Estimation
 
 In the previous iteration of our paper, we used structural *G*-estimation to compute counterfactuals. The logic is to (1) estimate the treatment model -- here exposure to *pre* or *post* election -- as a function of covariates, (2) use the treatment model to generate predicted probabilities of treatment assignment, (3) create a counterfactual dataset where the treatment is inverted for all respondents, and (4) generate predicted values from the outcome model for both the observed and counterfactual datasets. The difference between the two is the average treatment effect. Here's a similar approach using Bayesian estimation.
-
-
 
 ```{r}
 library(dplyr)
@@ -559,13 +963,9 @@ counterfactual_data <- recode_data %>%
 full_counterfactual_set <- bind_rows(observed_data, counterfactual_data)
 ```
 
-
-
 ## Two Scenarios
 
 I've created two copies of the same data -- one where `prepost` is observed, and one where `prepost` is flipped for everyone, the counterfactual. Now we can generate predicted values for both scenarios at the individual level.
-
-
 
 ```{r}
 
@@ -641,11 +1041,7 @@ print(average_counterfactual_effect)
                "4" = "Support")
 ```
 
-
-
 The Pre/Post comparisons can be presented like this,
-
-
 
 ```{r}
 
@@ -662,11 +1058,7 @@ plotDots(plot_burn$plotting_data |>
           category_labels = c("Disagree", "Neither","Agree"))
 ```
 
-
-
 Or like this,
-
-
 
 ```{r}
 library(dplyr)
@@ -736,11 +1128,7 @@ create_combined_sunflower(
 
 ```
 
-
-
 Or like this,
-
-
 
 ```{r}
 devtools::load_all()
@@ -762,11 +1150,7 @@ plotSunflower(
 )
 ```
 
-
-
 The information is identical, just conveyed in slighty different ways.
-
-
 
 ```{r}
 library(ggplot2)
@@ -883,13 +1267,9 @@ trump_no_legend + trump_margins +
 ggsave("ordered_logit_sunflower.png", width = 6, height = 5)
 ```
 
-
-
 ### Dot Plots
 
 ## Simple Graph
-
-
 
 ```{r}
 library(ggplot2)
@@ -1163,15 +1543,11 @@ plot_data <- sample_df %>%
   scale_fill_manual(values = c("Biden Voters"  = "#457B9D", "Trump Voters" = "#E63946"))
 ```
 
-
-
 ## Marginal effects.
 
 Say are interest is in whether these changes are statistically significant at the conventional 0.05 level. We can use the `predict_logit_probs()` function to generate predicted probabilities from a binary logit model, and then summarize those predictions.
 
 This gives us the marginal effect of supporting attending a march, for Trump voters versus Biden voters, from pre- to post-election. The marginal effect is just the change from pre to post for each group.
-
-
 
 ```{r}
 library(patchwork)
@@ -1180,13 +1556,9 @@ library(patchwork)
               heights = c(1, 0.5))
 ```
 
-
-
 ### Counterfactuals 
 
 The counterfactual for each respondent is not observable -- what *would* happen to those assigned to the post-election if they were instead assigned to the pre-election and vice-versa. So, what I do is first, estimate the model. Then, create two versions of the data; each dataset can be thought of as a population. In one version, the data is simply the observed data, in the second version, the pre-post variable is flipped for everyone. So, in the second dataset, everyone who was in the pre-election is put in the pre-election and those in the post-election are recoded as post-election. Then, I pass these datasets to the models -- which too are distributions, the posterior distributions of the parameters -- to generate predictions. From here, the different posterior predictive values constitute *what-if* scenarios -- e.g. everyone in the dataset is  and it's then fairly simple to calculate different treatment effects. Together these are the steps involved in the *g-computation* framework which we've been using. It involves fitting a model to the observed data -- the ordered or multinomial logit or linear regression -- and then simulating potential outcomes where every individual is in every treatment condition. 
-
-
 
 
 ```{r, warning= FALSE, message = FALSE, echo = TRUE}
@@ -1215,11 +1587,7 @@ preds_draws <- attend_march %>%
 
 ```
 
-
-
 By setting it up in this way -- creating a copy of the dataset where pre and post are flipped --  the treatment effect for every respondent can be calculated (over many simulated draws from the posterior distribution). From here, I can then calculated different types of treatment effects -- average treatment effects and conditional average treatment effects.
-
-
 
 ```{r, warning= FALSE, message = FALSE, echo = FALSE}
 ate_draws = preds_draws %>%
@@ -1276,6 +1644,7 @@ ate_draws |>
     source_note = "Data: Western States Survey 2020"
   )
 ```
+
 
 ```{r, warning= FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
 
@@ -1355,13 +1724,9 @@ preds_draws %>%
 ```
 
 
-
-
 ## Imbalance
 
 Inclusion into the survey is partially known because we have an oversample of Latino voters...So I thought I'd include additional covariates, which we can similarly average across...
-
-
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 recode_data <- westernData %>%
@@ -1408,6 +1773,8 @@ preds_draws <- attend_march %>%
   )
 
 ```
+
+
 
 ```{r, warning= FALSE, message = FALSE, echo = FALSE}
 
@@ -1467,6 +1834,7 @@ ate_draws |>
     source_note = "Data: Western States Survey 2020"
   )
 ```
+
 
 ```{r, echo= FALSE, fig.width=8, fig.height=6, warning= FALSE, message = FALSE}
 ate_means <-
@@ -1545,11 +1913,7 @@ preds_draws %>%
   )
 ```
 
-
-
 ## Heterogeneous Effects
-
-
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 
@@ -1563,6 +1927,8 @@ attend_march = brm(attend_march ~ prepost*vote_trump*latino ,
 print(attend_march)
 ```
 
+
+
 ```{r, warning= FALSE, message = FALSE, echo = FALSE}
 library(tidybayes)
 ## Generate Predictions, The Observed Response and the Counterfactual Response
@@ -1572,6 +1938,8 @@ preds_draws <- attend_march %>%
     ndraws = 500
   )
 ```
+
+
 
 ```{r, fig.width=8, fig.height=8, echo = FALSE, warning= FALSE, message = FALSE}
 library(ggplot2)
@@ -1663,11 +2031,7 @@ preds_draws %>%
 
 ```
 
-
-
 ##  Question Wording Effects
-
-
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 
@@ -1682,6 +2046,8 @@ print(attend_march)
 
 ```
 
+
+
 ```{r, warning = FALSE, message = FALSE, echo = TRUE}
 preds_draws <- attend_march %>%
   add_epred_draws(
@@ -1689,6 +2055,10 @@ preds_draws <- attend_march %>%
     ndraws = 500
   )
 ```
+
+
+
+
 
 ```{r,  warning = FALSE, message = FALSE, echo = FALSE, fig.width=7, fig.height=6}
 
@@ -1772,15 +2142,11 @@ preds_draws %>%
   )
 ```
 
-
-
 ## Other Item Analysis 
 
 The remaining items -- flag burning, court challenges, election recounts, criticizing the election -- are:
 
 ### Flag Burning
-
-
 
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
@@ -1904,6 +2270,7 @@ ate_draws |>
   )
 ```
 
+
 ```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
 
 # Calculate means for each group
@@ -1985,11 +2352,7 @@ preds_draws %>%
   )
 ```
 
-
-
 ### Ballot Recounts
-
-
 
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
@@ -2107,6 +2470,7 @@ ate_draws |>
   )
 ```
 
+
 ```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
 
 # Calculate means for each group
@@ -2188,11 +2552,7 @@ preds_draws %>%
   )
 ```
 
-
-
 ### Criticize Eleciton
-
-
 
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
@@ -2310,6 +2670,7 @@ ate_draws |>
   )
 ```
 
+
 ```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
 
 # Calculate means for each group
@@ -2392,11 +2753,7 @@ preds_draws %>%
 ```
 
 
-
-
 ### Contest Election in Court
-
-
 
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE, fig.width=8, fig.height=6}
@@ -2514,6 +2871,7 @@ ate_draws |>
   )
 ```
 
+
 ```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
 
 # Calculate means for each group
@@ -2596,11 +2954,7 @@ preds_draws %>%
 ```
 
 
-
-
 ## Average Contestation Scores
-
-
 
 ```{r, echo = FALSE, message = FALSE, warning = FALSE}
 westernData |>
@@ -2625,6 +2979,7 @@ contestation_score = brm(contestation_score ~ prepost*vote_trump + white + latin
 
 print(contestation_score)
 ```
+
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 observed_data <- recode_data %>%
@@ -2701,6 +3056,7 @@ ate_draws |>
     source_note = "Data: Western States Survey 2020"
   )
 ```
+
 
 ```{r, fig.width=8, fig.height=6, echo= FALSE, warning= FALSE, message = FALSE}
 # Calculate means for each group
@@ -2782,4 +3138,6 @@ ate_means <-
     legend.position = "none"
   )
 ```
+
+
 
